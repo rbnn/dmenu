@@ -1,0 +1,5 @@
+#!/bin/sh
+cmd=$(dmenu-git_new/i3wm_commands.py | dmenu-git_new/dmenu -c)
+if [ $? -eq 0 ]; then
+  exec i3-msg "$cmd"
+fi
