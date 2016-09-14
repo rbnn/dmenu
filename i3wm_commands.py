@@ -54,9 +54,15 @@ def i3wm_focus_commands(i3, out = sys.stdout):
   # Output focus commands
   out.writelines(['focus output %s\n' % fp for fp in focus_output])
 
+def i3wm_border_commands(i3, out = sys.stdout):
+  border_param = ['normal', 'pixel', 'none', 'toggle']
+
+  out.writelines(['border %s\n' % bp for bp in border_param])
+
 i3 = i3ipc.Connection()
 i3wm_workspace_commands(i3, sys.stdout)
 i3wm_layout_commands(i3, sys.stdout)
 i3wm_split_container(i3, sys.stdout)
 i3wm_move_container(i3, sys.stdout)
 i3wm_focus_commands(i3, sys.stdout)
+i3wm_border_commands(i3, sys.stdout)
