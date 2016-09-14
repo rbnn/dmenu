@@ -1,5 +1,6 @@
 /* See LICENSE file for copyright and license details. */
 #include <ctype.h>
+#include <getopt.h>
 #include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -605,44 +606,49 @@ usage(void)
 	exit(1);
 }
 
+static char const optstr[] = "c:hfil:p:m:";
+
 int
 main(int argc, char *argv[])
 {
-	int i, fast = 0;
+	int c, fast = 0;
+	char *config_file = NULL;
+	opterr = 0;
 
-	for (i = 1; i < argc; i++)
-		/* these options take no arguments */
-		if (!strcmp(argv[i], "-v")) {      /* prints version information */
-			puts("dmenu-"VERSION);
-			exit(0);
-		} else if (!strcmp(argv[i], "-b")) /* appears at the bottom of the screen */
-			topbar = 0;
-		else if (!strcmp(argv[i], "-f"))   /* grabs keyboard before reading stdin */
-			fast = 1;
-		else if (!strcmp(argv[i], "-i")) { /* case-insensitive item matching */
-			fstrncmp = strncasecmp;
-			fstrstr = cistrstr;
-		} else if (i + 1 == argc)
-			usage();
-		/* these options take one argument */
-		else if (!strcmp(argv[i], "-l"))   /* number of lines in vertical list */
-			lines = atoi(argv[++i]);
-		else if (!strcmp(argv[i], "-m"))
-			mon = atoi(argv[++i]);
-		else if (!strcmp(argv[i], "-p"))   /* adds prompt to left of input field */
-			prompt = argv[++i];
-		else if (!strcmp(argv[i], "-fn"))  /* font or font set */
-			fonts[0] = argv[++i];
-		else if (!strcmp(argv[i], "-nb"))  /* normal background color */
-			colors[SchemeNorm][ColBg] = argv[++i];
-		else if (!strcmp(argv[i], "-nf"))  /* normal foreground color */
-			colors[SchemeNorm][ColFg] = argv[++i];
-		else if (!strcmp(argv[i], "-sb"))  /* selected background color */
-			colors[SchemeSel][ColBg] = argv[++i];
-		else if (!strcmp(argv[i], "-sf"))  /* selected foreground color */
-			colors[SchemeSel][ColFg] = argv[++i];
-		else
-			usage();
+	while(-1 != (c = getopt(argc, argv, optstr))) {
+	  switch(c) {
+	    case 'c':   /* select config file */
+	      config_file = optarg;
+	      break;
+
+	    case 'h':   /* print help message */
+	      usage();
+
+	    case 'f':   /* fast mode */
+	      fast = 1;
+	      break;
+
+	    case 'i':   /* case-insensitive item matching */
+	      fstrncmp = strncasecmp;
+	      fstrstr = cistrstr;
+	      break;
+
+	    case 'l':   /* number of lines in vertical list */
+	      lines = atoi(optarg);
+	      break;
+
+	    case 'p':   /* adds prompt to left of input field */
+	      prompt = optarg;
+	      break;
+
+	    case 'm':   /* select monitor */
+	      mon = atoi(optarg);
+	      break;
+
+	    default:
+	      usage();
+	  } /* switch ... */
+	} /* while ... */
 
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
 		fputs("warning: no locale support\n", stderr);
