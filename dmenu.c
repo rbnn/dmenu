@@ -1,12 +1,14 @@
 /* See LICENSE file for copyright and license details. */
 #include <ctype.h>
 #include <getopt.h>
+#include <libconfig.h>
 #include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <time.h>
+#include <wordexp.h>
 
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
@@ -34,6 +36,13 @@ struct item {
 	int out;
 };
 
+#define MATCH_ALGO_TOKEN    "token"
+#define MATCH_ALGO_PREFIX   "prefix"
+#define MATCH_ALGO_DEFAULT  MATCH_ALGO_TOKEN
+
+#define AUTO_COMPLETE_ALGO_PREFIX   "prefix"
+#define AUTO_COMPLETE_ALGO_DEFAULT  AUTO_COMPLETE_ALGO_PREFIX
+
 static char text[BUFSIZ] = "";
 static int bh, mw, mh;
 static int sw, sh; /* X display screen geometry width, height */
@@ -44,8 +53,11 @@ static struct item *items = NULL;
 static struct item *matches, *matchend;
 static struct item *prev, *curr, *next, *sel;
 static int mon = -1, screen;
+static char *match_algo = MATCH_ALGO_DEFAULT;
+static char *auto_complete_algo = AUTO_COMPLETE_ALGO_DEFAULT;
 static void(*match_func)(void) = NULL;
 static void(*auto_complete_func)(void) = NULL;
+static config_t configuration;
 
 static Atom clip, utf8;
 static Display *dpy;
@@ -55,11 +67,11 @@ static XIC xic;
 static Drw *drw;
 static Clr *scheme[SchemeLast];
 
-static char const optstr[] = "ac:hfil:p:m:vx::";
+static char const optstr[] = "ac::hfil:p:m:vx::";
 static struct option optlng[] =
 {
   {"auto-complete",       0, NULL, 'a'},
-  {"config",              1, NULL, 'c'},
+  {"config",              2, NULL, 'c'},
   {"help",                0, NULL, 'h'},
   {"fast",                0, NULL, 'f'},
   {"lines",               1, NULL, 'l'},
@@ -122,6 +134,7 @@ cleanup(void)
 	drw_free(drw);
 	XSync(dpy, False);
 	XCloseDisplay(dpy);
+	config_destroy(&configuration);
 }
 
 static char *
@@ -695,6 +708,70 @@ setup(void)
 }
 
 static void
+read_configuration(char const *const path)
+{
+  if(!path) {
+    read_configuration(DEFAULT_CONFIG);
+    return;
+  } /* if ... */
+
+  wordexp_t we_file;
+  if(0 != wordexp(path, &we_file, 0)) die("cannot expand `%s': %m", path);
+
+  FILE *f_cfg = fopen(we_file.we_wordv[0], "r");
+  if(!f_cfg) return;
+
+  if(CONFIG_TRUE != config_read(&configuration, f_cfg)) {
+    /* Fatal error. f_cfg will be closed automaticaly on exit. */
+    die("cannot read `%s': %s (near line %i)", we_file.we_wordv[0], config_error_text(&configuration), config_error_line(&configuration));
+  } /* if ... */
+  wordfree(&we_file);
+
+  /* Reading was successfull */
+  /* Fast? */
+
+  /* Lines */
+  int tmp_lines;
+  if(CONFIG_TRUE == config_lookup_int(&configuration, "lines", &tmp_lines)) {
+    /* Set lines */
+    lines = (0 < tmp_lines) ? tmp_lines : 0;
+  } /* if ... */
+
+  /* Prompt */
+  config_lookup_string(&configuration, "prompt", (char const**)&prompt);
+
+  /* Match function */
+  config_lookup_string(&configuration, "match", (char const**)&match_algo);
+
+  /* Auto complete functio */
+  config_lookup_string(&configuration, "auto_complete", (char const**)&auto_complete_algo);
+
+  /* Monitor */
+  config_lookup_int(&configuration, "monitor", &mon);
+
+  /* Font */
+  config_lookup_string(&configuration, "font", &fonts[0]);
+
+  /* Normal-Group */
+  config_setting_t *normal = config_lookup(&configuration, "normal");
+  if(normal) {
+    /* Go down to normal colors */
+    config_setting_lookup_string(normal, "foreground", &colors[SchemeNorm][ColFg]);
+    config_setting_lookup_string(normal, "background", &colors[SchemeNorm][ColBg]);
+  } /* if ... */
+
+  /* Selected-Group */
+  config_setting_t *selected = config_lookup(&configuration, "selected");
+  if(selected) {
+    /* Go down to selected colors */
+    config_setting_lookup_string(selected, "foreground", &colors[SchemeSel][ColFg]);
+    config_setting_lookup_string(selected, "background", &colors[SchemeSel][ColBg]);
+  } /* if ... */
+
+  fclose(f_cfg);
+}
+
+static void
 usage(void)
 {
 	fputs("usage: dmenu [-c|--config=FILE] [-h|--help] [-f|--fast]\n"
@@ -710,9 +787,9 @@ int
 main(int argc, char *argv[])
 {
 	int c, idx, fast = 0;
-	char *match_algo = "sub";
-	char *auto_complete_algo = "";
 	opterr = 0;
+
+	config_init(&configuration);
 
 	while(-1 != (c = getopt_long(argc, argv, optstr, optlng, &idx))) {
 	  switch(c) {
@@ -737,11 +814,11 @@ main(int argc, char *argv[])
 	    break;
 
 	  case 'a':   /* auto complete */
-	    auto_complete_algo = "lcp";
+	    auto_complete_algo = AUTO_COMPLETE_ALGO_PREFIX;
 	    break;
 
 	  case 'c':   /* select config file */
-	    /* config_file = optarg; */
+	    read_configuration(optarg);
 	    break;
 
 	  case 'h':   /* print help message */
@@ -785,10 +862,10 @@ main(int argc, char *argv[])
 	} /* while ... */
 
 	/* Select match-algorithm */
-	if(!strcasecmp("sub", match_algo)) {
+	if(!strcasecmp(MATCH_ALGO_TOKEN, match_algo)) {
 	  /* Use sub-pattern matching (default) */
 	  match_func = match_sub_pattern;
-	} else if(!strcasecmp("prefix", match_algo)) {
+	} else if(!strcasecmp(MATCH_ALGO_PREFIX, match_algo)) {
 	  /* Use common-prefix matching */
 	  match_func = match_common_prefix;
 	} else {
@@ -800,7 +877,7 @@ main(int argc, char *argv[])
 	} /* if ... */
 
 	/* Select auto-complete-algorithm */
-	if(!strcasecmp("lcp", auto_complete_algo)) {
+	if(!strcasecmp(AUTO_COMPLETE_ALGO_PREFIX, auto_complete_algo)) {
 	  auto_complete_func = auto_complete_longest_common_prefix;
 	} /* if ... */
 
