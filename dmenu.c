@@ -601,52 +601,63 @@ setup(void)
 static void
 usage(void)
 {
-	fputs("usage: dmenu [-b] [-f] [-i] [-l lines] [-p prompt] [-fn font] [-m monitor]\n"
-	      "             [-nb color] [-nf color] [-sb color] [-sf color] [-v]\n", stderr);
+	fputs("usage: dmenu [-b] [-f] [-i] [-l lines] [-p prompt] [-fn font]\n"
+	      "             [-m monitor] [-nb color] [-nf color] [-sb color]\n"
+	      "             [-sf color] [-v] [-c config] [-x match]\n", stderr);
 	exit(1);
 }
 
-static char const optstr[] = "c:hfil:p:m:";
+static char const optstr[] = "c:hfil:p:m:v";
 
 int
 main(int argc, char *argv[])
 {
 	int c, fast = 0;
-	char *config_file = NULL;
 	opterr = 0;
 
 	while(-1 != (c = getopt(argc, argv, optstr))) {
 	  switch(c) {
-	    case 'c':   /* select config file */
-	      config_file = optarg;
-	      break;
+	  case 'c':   /* select config file */
+	    /* config_file = optarg; */
+	    break;
 
-	    case 'h':   /* print help message */
-	      usage();
+	  case 'h':   /* print help message */
+	    usage();
+	    break;
 
-	    case 'f':   /* fast mode */
-	      fast = 1;
-	      break;
+	  case 'f':   /* fast mode */
+	    fast = 1;
+	    break;
 
-	    case 'i':   /* case-insensitive item matching */
-	      fstrncmp = strncasecmp;
-	      fstrstr = cistrstr;
-	      break;
+	  case 'i':   /* case-insensitive item matching */
+	    fstrncmp = strncasecmp;
+	    fstrstr = cistrstr;
+	    break;
 
-	    case 'l':   /* number of lines in vertical list */
-	      lines = atoi(optarg);
-	      break;
+	  case 'l':   /* number of lines in vertical list */
+	    lines = atoi(optarg);
+	    break;
 
-	    case 'p':   /* adds prompt to left of input field */
-	      prompt = optarg;
-	      break;
+	  case 'p':   /* adds prompt to left of input field */
+	    prompt = optarg;
+	    break;
 
-	    case 'm':   /* select monitor */
-	      mon = atoi(optarg);
-	      break;
+	  case 'm':   /* select monitor */
+	    mon = atoi(optarg);
+	    break;
 
-	    default:
-	      usage();
+	  case 'v':   /* print version number */
+	    puts("dmenu-"VERSION);
+	    exit(0);
+
+	  case 'x':   /* select different matching algorithm */
+	    /* match_func = NULL; */
+	    break;
+
+	  default:
+	    usage();
+	    break;
+
 	  } /* switch ... */
 	} /* while ... */
 
