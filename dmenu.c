@@ -55,7 +55,7 @@ static XIC xic;
 static Drw *drw;
 static Clr *scheme[SchemeLast];
 
-static char const optstr[] = "ac:hfil:p:m:v";
+static char const optstr[] = "ac:hfil:p:m:vx:";
 static struct option optlng[] =
 {
   {"auto-complete",       0, NULL, 'a'},
