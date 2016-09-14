@@ -55,7 +55,7 @@ static XIC xic;
 static Drw *drw;
 static Clr *scheme[SchemeLast];
 
-static char const optstr[] = "ac:hfil:p:m:vx:";
+static char const optstr[] = "ac:hfil:p:m:vx::";
 static struct option optlng[] =
 {
   {"auto-complete",       0, NULL, 'a'},
@@ -64,7 +64,7 @@ static struct option optlng[] =
   {"fast",                0, NULL, 'f'},
   {"lines",               1, NULL, 'l'},
   {"prompt",              1, NULL, 'p'},
-  {"match",               1, NULL, 'x'},
+  {"match",               2, NULL, 'x'},
   {"monitor",             1, NULL, 'm'},
   {"font",                1, NULL,  1 },
   {"normal-background",   1, NULL,  2 },
@@ -774,7 +774,7 @@ main(int argc, char *argv[])
 	    exit(0);
 
 	  case 'x':   /* select different matching algorithm */
-	    match_algo = optarg;
+	    match_algo = optarg ? optarg : "prefix";
 	    break;
 
 	  default:
