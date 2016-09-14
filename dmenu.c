@@ -269,13 +269,19 @@ static void
 match_common_prefix(void)
 {
   struct item *item;
-  size_t const textsize = strlen(text);
+  char const *tok = text;
 
   matches = matchend = NULL;
 
+  while(isspace(*tok)) {
+    /* Eat up all white space */
+    tok += 1;
+  } /* while ... */
+
+  size_t const toksize = strlen(tok);
   for(item = items; item && item->text; item++) {
     /* Compare prefix and select only items with common prefix. */
-    if(!textsize || !fstrncmp(text, item->text, textsize)) {
+    if(!toksize || !fstrncmp(tok, item->text, toksize)) {
       appenditem(item, &matches, &matchend);
     } /* if ... */
   } /* for ... */
