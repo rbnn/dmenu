@@ -45,6 +45,7 @@ static struct item *matches, *matchend;
 static struct item *prev, *curr, *next, *sel;
 static int mon = -1, screen;
 static void(*match_func)(void) = NULL;
+static void(*auto_complete_func)(void) = NULL;
 
 static Atom clip, utf8;
 static Display *dpy;
@@ -54,9 +55,10 @@ static XIC xic;
 static Drw *drw;
 static Clr *scheme[SchemeLast];
 
-static char const optstr[] = "c:hfil:p:m:v";
+static char const optstr[] = "ac:hfil:p:m:v";
 static struct option optlng[] =
 {
+  {"auto-complete",       0, NULL, 'a'},
   {"config",              1, NULL, 'c'},
   {"help",                0, NULL, 'h'},
   {"fast",                0, NULL, 'f'},
@@ -291,6 +293,51 @@ match_common_prefix(void)
 }
 
 static void
+auto_complete_longest_common_prefix(void)
+{
+  struct item *item;
+  size_t maxtextsize = 0;
+
+  for(item = matches; item && item->text; item = item->right) {
+    size_t const curtextsize = strlen(item->text);
+    maxtextsize = (maxtextsize < curtextsize) ? curtextsize : maxtextsize;
+    if(!maxtextsize) return;
+  } /*  for ... */
+
+
+  char *maxprefix = (char*)malloc(1 + maxtextsize);
+  if(!maxprefix) die("cannot allocate %lu bytes.", 1 + maxtextsize);
+
+  size_t maxprefixsize = strlen(matches->text);
+  memcpy(maxprefix, matches->text, 1 + maxprefixsize);
+
+  /* Find maximum prefix
+   *
+   * Algorithm starts with first selection and shortens this string until all
+   * items compare greater or equal to it. Doing so the algorithm strips
+   * leading white space characters. */
+  for(item = matches->right; item && item->text && maxprefixsize; item = item->right) {
+    while(maxprefixsize && fstrncmp(maxprefix, item->text, maxprefixsize)) {
+      maxprefixsize -= 1;
+      *(maxprefix + maxprefixsize) = '\0';
+    }
+
+    /* Shortcut, when no completion is found */
+    if(!maxprefixsize) break;
+  } /* for ... */
+
+  /* Update input field and cursor */
+  if(maxprefixsize) {
+    strcpy(text, maxprefix);
+    cursor = maxprefixsize;
+  } /* if ... */
+
+  /* Free temporary memory */
+  free(maxprefix);
+  calcoffsets();
+}
+
+static void
 insert(const char *str, ssize_t n)
 {
 	if (strlen(text) + n > sizeof text - 1)
@@ -476,10 +523,14 @@ keypress(XKeyEvent *ev)
 	case XK_Tab:
 		if (!sel)
 			return;
-		strncpy(text, sel->text, sizeof text - 1);
-		text[sizeof text - 1] = '\0';
-		cursor = strlen(text);
-		match_func();
+		if(!auto_complete_func) {
+  		strncpy(text, sel->text, sizeof text - 1);
+	  	text[sizeof text - 1] = '\0';
+		  cursor = strlen(text);
+  		match_func();
+  	} else {
+  	  auto_complete_func();
+  	} /* if ... */
 		break;
 	}
 	drawmenu();
@@ -648,7 +699,7 @@ usage(void)
 {
 	fputs("usage: dmenu [-c|--config=FILE] [-h|--help] [-f|--fast]\n"
 	      "             [-l|--lines=N] [-p|--prompt=STR] [-x|--match=(sub|prefix)]\n"
-	      "             [-m|--monitor=n] [--font=FONT]\n"
+	      "             [-a|--auto-complete] [-m|--monitor=n] [--font=FONT]\n"
 	      "             [--normal-foreground=CLR] [--normal-background=CLR]\n"
 	      "             [--selected-foreground=CLR] [--selected-background=CLR]\n"
 	      "             [-v|--version]\n", stderr);
@@ -660,6 +711,7 @@ main(int argc, char *argv[])
 {
 	int c, idx, fast = 0;
 	char *match_algo = "sub";
+	char *auto_complete_algo = "";
 	opterr = 0;
 
 	while(-1 != (c = getopt_long(argc, argv, optstr, optlng, &idx))) {
@@ -682,6 +734,10 @@ main(int argc, char *argv[])
 
 	  case  5:    /* no.rmal foreground color */
 	    colors[SchemeSel][ColFg] = optarg;
+	    break;
+
+	  case 'a':   /* auto complete */
+	    auto_complete_algo = "lcp";
 	    break;
 
 	  case 'c':   /* select config file */
@@ -741,6 +797,11 @@ main(int argc, char *argv[])
 
 	if(!match_func) {
 	  die("no match-algorithm was selected.");
+	} /* if ... */
+
+	/* Select auto-complete-algorithm */
+	if(!strcasecmp("lcp", auto_complete_algo)) {
+	  auto_complete_func = auto_complete_longest_common_prefix;
 	} /* if ... */
 
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
