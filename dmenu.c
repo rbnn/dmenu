@@ -601,22 +601,62 @@ setup(void)
 static void
 usage(void)
 {
-	fputs("usage: dmenu [-b] [-f] [-i] [-l lines] [-p prompt] [-fn font]\n"
-	      "             [-m monitor] [-nb color] [-nf color] [-sb color]\n"
-	      "             [-sf color] [-v] [-c config] [-x match]\n", stderr);
+	fputs("usage: dmenu [-c|--config=FILE] [-h|--help] [-f|--fast]\n"
+	      "             [-l|--lines=N] [-p|--prompt=STR] [-x|--match=(sub|lcs)]\n"
+	      "             [-m|--monitor=n] [--font=FONT]\n"
+	      "             [--normal-foreground=CLR] [--normal-background=CLR]\n"
+	      "             [--selected-foreground=CLR] [--selected-background=CLR]\n"
+	      "             [-v|--version]\n", stderr);
 	exit(1);
 }
 
 static char const optstr[] = "c:hfil:p:m:v";
+static struct option optlng[] =
+{
+  {"config",              1, NULL, 'c'},
+  {"help",                0, NULL, 'h'},
+  {"fast",                0, NULL, 'f'},
+  {"lines",               1, NULL, 'l'},
+  {"prompt",              1, NULL, 'p'},
+  {"match",               1, NULL, 'x'},
+  {"monitor",             1, NULL, 'm'},
+  {"font",                1, NULL,  1 },
+  {"normal-background",   1, NULL,  2 },
+  {"normal-foreground",   1, NULL,  3 },
+  {"selected-background", 1, NULL,  4 },
+  {"selected-foreground", 1, NULL,  5 },
+  {"version",             0, NULL, 'v'},
+  {NULL,                  0, NULL,  0 }
+};
 
 int
 main(int argc, char *argv[])
 {
-	int c, fast = 0;
+	int c, idx, fast = 0;
 	opterr = 0;
 
-	while(-1 != (c = getopt(argc, argv, optstr))) {
+	while(-1 != (c = getopt_long(argc, argv, optstr, optlng, &idx))) {
 	  switch(c) {
+	  case  1:    /* font or font set */
+	    fonts[0] = optarg;
+	    break;
+
+	  case  2:    /* normal background color */
+	    colors[SchemeNorm][ColBg] = optarg;
+	    break;
+
+	  case  3:    /* normal foreground color */
+	    colors[SchemeNorm][ColFg] = optarg;
+	    break;
+
+	  case  4:    /* selected background color */
+	    colors[SchemeSel][ColBg] = optarg;
+	    break;
+
+	  case  5:    /* no.rmal foreground color */
+	    colors[SchemeSel][ColFg] = optarg;
+	    break;
+
 	  case 'c':   /* select config file */
 	    /* config_file = optarg; */
 	    break;
