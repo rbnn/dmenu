@@ -13,6 +13,7 @@ def i3wm_workspace_commands(i3, out = sys.stdout):
 
   # Rename workspaces
   out.writelines(['rename workspace %s to \n' % x for x in ws_names])
+  out.writelines('rename workspace to \n')
 
   # Move container
   out.writelines(['move container to workspace %s\n' % x for x in ws_names])

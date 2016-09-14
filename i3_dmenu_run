@@ -1,5 +1,5 @@
 #!/bin/sh
-cmd=$(dmenu-git_new/i3wm_commands.py | dmenu-git_new/dmenu -ic)
+cmd=$(dmenu-git_new/i3wm_commands.py | sort | dmenu-git_new/dmenu -ic)
 if [ $? -eq 0 ]; then
   exec i3-msg "$cmd"
 fi
