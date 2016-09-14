@@ -739,6 +739,10 @@ main(int argc, char *argv[])
 	  die("invalid match-algorithm: %s", match_algo);
 	} /* if ... */
 
+	if(!match_func) {
+	  die("no match-algorithm was selected.");
+	} /* if ... */
+
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
 		fputs("warning: no locale support\n", stderr);
 	if (!(dpy = XOpenDisplay(NULL)))
