@@ -1,0 +1,15 @@
+lines=0;
+match = "prefix";
+auto_complete = "prefix";
+font = "Lato-7";
+prompt = "i3 ~>";
+
+normal = {
+  foreground = "black";
+  background = "lightgray";
+};
+
+selected = {
+  foreground = "black";
+  background = "lightgreen";
+};
