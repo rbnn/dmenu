@@ -266,7 +266,7 @@ match_sub_pattern(void)
 }
 
 static void
-match_longest_common_string(void)
+match_common_prefix(void)
 {
   struct item *item;
   size_t const textsize = strlen(text);
@@ -641,7 +641,7 @@ static void
 usage(void)
 {
 	fputs("usage: dmenu [-c|--config=FILE] [-h|--help] [-f|--fast]\n"
-	      "             [-l|--lines=N] [-p|--prompt=STR] [-x|--match=(sub|lcs)]\n"
+	      "             [-l|--lines=N] [-p|--prompt=STR] [-x|--match=(sub|prefix)]\n"
 	      "             [-m|--monitor=n] [--font=FONT]\n"
 	      "             [--normal-foreground=CLR] [--normal-background=CLR]\n"
 	      "             [--selected-foreground=CLR] [--selected-background=CLR]\n"
@@ -726,9 +726,9 @@ main(int argc, char *argv[])
 	if(!strcasecmp("sub", match_algo)) {
 	  /* Use sub-pattern matching (default) */
 	  match_func = match_sub_pattern;
-	} else if(!strcasecmp("lcs", match_algo)) {
-	  /* Use longest-common-string matching */
-	  match_func = match_longest_common_string;
+	} else if(!strcasecmp("prefix", match_algo)) {
+	  /* Use common-prefix matching */
+	  match_func = match_common_prefix;
 	} else {
 	  die("invalid match-algorithm: %s", match_algo);
 	} /* if ... */
