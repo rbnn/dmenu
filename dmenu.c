@@ -53,6 +53,25 @@ static XIC xic;
 static Drw *drw;
 static Clr *scheme[SchemeLast];
 
+static char const optstr[] = "c:hfil:p:m:v";
+static struct option optlng[] =
+{
+  {"config",              1, NULL, 'c'},
+  {"help",                0, NULL, 'h'},
+  {"fast",                0, NULL, 'f'},
+  {"lines",               1, NULL, 'l'},
+  {"prompt",              1, NULL, 'p'},
+  {"match",               1, NULL, 'x'},
+  {"monitor",             1, NULL, 'm'},
+  {"font",                1, NULL,  1 },
+  {"normal-background",   1, NULL,  2 },
+  {"normal-foreground",   1, NULL,  3 },
+  {"selected-background", 1, NULL,  4 },
+  {"selected-foreground", 1, NULL,  5 },
+  {"version",             0, NULL, 'v'},
+  {NULL,                  0, NULL,  0 }
+};
+
 #include "config.h"
 
 static int (*fstrncmp)(const char *, const char *, size_t) = strncmp;
@@ -609,25 +628,6 @@ usage(void)
 	      "             [-v|--version]\n", stderr);
 	exit(1);
 }
-
-static char const optstr[] = "c:hfil:p:m:v";
-static struct option optlng[] =
-{
-  {"config",              1, NULL, 'c'},
-  {"help",                0, NULL, 'h'},
-  {"fast",                0, NULL, 'f'},
-  {"lines",               1, NULL, 'l'},
-  {"prompt",              1, NULL, 'p'},
-  {"match",               1, NULL, 'x'},
-  {"monitor",             1, NULL, 'm'},
-  {"font",                1, NULL,  1 },
-  {"normal-background",   1, NULL,  2 },
-  {"normal-foreground",   1, NULL,  3 },
-  {"selected-background", 1, NULL,  4 },
-  {"selected-foreground", 1, NULL,  5 },
-  {"version",             0, NULL, 'v'},
-  {NULL,                  0, NULL,  0 }
-};
 
 int
 main(int argc, char *argv[])
