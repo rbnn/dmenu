@@ -44,6 +44,7 @@ static struct item *items = NULL;
 static struct item *matches, *matchend;
 static struct item *prev, *curr, *next, *sel;
 static int mon = -1, screen;
+static void(*match_func)(void) = NULL;
 
 static Atom clip, utf8;
 static Display *dpy;
@@ -211,7 +212,7 @@ grabkeyboard(void)
 }
 
 static void
-match(void)
+match_sub_pattern(void)
 {
 	static char **tokv = NULL;
 	static int tokn = 0;
@@ -265,6 +266,25 @@ match(void)
 }
 
 static void
+match_longest_common_string(void)
+{
+  struct item *item;
+  size_t const textsize = strlen(text);
+
+  matches = matchend = NULL;
+
+  for(item = items; item && item->text; item++) {
+    /* Compare prefix and select only items with common prefix. */
+    if(!textsize || !fstrncmp(text, item->text, textsize)) {
+      appenditem(item, &matches, &matchend);
+    } /* if ... */
+  } /* for ... */
+
+  curr = sel = matches;
+  calcoffsets();
+}
+
+static void
 insert(const char *str, ssize_t n)
 {
 	if (strlen(text) + n > sizeof text - 1)
@@ -274,7 +294,7 @@ insert(const char *str, ssize_t n)
 	if (n > 0)
 		memcpy(&text[cursor], str, n);
 	cursor += n;
-	match();
+	match_func();
 }
 
 static size_t
@@ -319,7 +339,7 @@ keypress(XKeyEvent *ev)
 
 		case XK_k: /* delete right */
 			text[cursor] = '\0';
-			match();
+			match_func();
 			break;
 		case XK_u: /* delete left */
 			insert(NULL, 0 - cursor);
@@ -453,7 +473,7 @@ keypress(XKeyEvent *ev)
 		strncpy(text, sel->text, sizeof text - 1);
 		text[sizeof text - 1] = '\0';
 		cursor = strlen(text);
-		match();
+		match_func();
 		break;
 	}
 	drawmenu();
@@ -596,7 +616,7 @@ setup(void)
 	}
 	promptw = (prompt && *prompt) ? TEXTW(prompt) - lrpad / 4 : 0;
 	inputw = MIN(inputw, mw/3);
-	match();
+	match_func();
 
 	/* create menu window */
 	swa.override_redirect = True;
@@ -633,6 +653,7 @@ int
 main(int argc, char *argv[])
 {
 	int c, idx, fast = 0;
+	char *match_algo = "sub";
 	opterr = 0;
 
 	while(-1 != (c = getopt_long(argc, argv, optstr, optlng, &idx))) {
@@ -691,7 +712,7 @@ main(int argc, char *argv[])
 	    exit(0);
 
 	  case 'x':   /* select different matching algorithm */
-	    /* match_func = NULL; */
+	    match_algo = optarg;
 	    break;
 
 	  default:
@@ -700,6 +721,17 @@ main(int argc, char *argv[])
 
 	  } /* switch ... */
 	} /* while ... */
+
+	/* Select match-algorithm */
+	if(!strcasecmp("sub", match_algo)) {
+	  /* Use sub-pattern matching (default) */
+	  match_func = match_sub_pattern;
+	} else if(!strcasecmp("lcs", match_algo)) {
+	  /* Use longest-common-string matching */
+	  match_func = match_longest_common_string;
+	} else {
+	  die("invalid match-algorithm: %s", match_algo);
+	} /* if ... */
 
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
 		fputs("warning: no locale support\n", stderr);
