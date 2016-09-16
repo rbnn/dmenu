@@ -1,8 +1,15 @@
 #include "xcmd.h"
 #include "utils.h"
 #include <ctype.h>
+#include <regex.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define min(x, y)     (((x) < (y)) ? (x) : (y))
+#define max(x, y)     (((x) > (y)) ? (x) : (y))
+#define clip(x, y, z) max(min(x, z), y)
+
+static void *match_regex_initx(xcmd_t *ptr, const char *input, const int flags);
 
 void xcmd_init(xcmd_t *ptr, const xcfg_t *cfg)
 {
@@ -11,10 +18,13 @@ void xcmd_init(xcmd_t *ptr, const xcfg_t *cfg)
   debug("Initialize xcmd-model.");
 
   /* Initialize items */
-  ptr->all_items = NULL;
-  ptr->matching_items = NULL;
-  ptr->matching_count = 0;
-  ptr->selected_item = 0;
+  ptr->all_items.index = NULL;
+  ptr->all_items.data  = 0;
+  ptr->all_items.count = 0;
+  ptr->matches.index   = NULL;
+  ptr->matches.shadow  = NULL;
+  ptr->matches.count = 0;
+  ptr->matches.selected = 0;
 
   /* Select appropriate configuration */
   debug("Apply %s configuration.", cfg ? "default" : "user");
@@ -25,29 +35,53 @@ void xcmd_init(xcmd_t *ptr, const xcfg_t *cfg)
   } /* if ... */
 
   /* String comparison */
-  if(cfg->case_insensitive) { ptr->strncmp = &strncasecmp;
-  } else { ptr->strncmp = &strncmp;
+  debug("String comparison: case-%ssensitive", cfg->case_insensitive ? "in" : "");
+  if(cfg->case_insensitive) {
+    /* Compare strings ignoring case */
+    ptr->strncmp = &strncasecmp;
+  } else {
+    /* Compare string case sensitive */
+    ptr->strncmp = &strncmp;
   } /* if ... */
 
   /* Auto complete */
+  ptr->complete_data = NULL;
   switch(cfg->complete) {
     case xcmd_complete_none:
+      debug("Disable auto-complete.");
+      ptr->complete_init = NULL;
+      ptr->complete_free = NULL;
       ptr->complete = NULL;
       break;
   } /* switch ... */
 
   /* Match functions */
+  ptr->match_data = NULL;
   switch(cfg->match) {
     case xcmd_match_prefix:
-      ptr->match = &match_prefix;
+      debug("Match items on common prefix.");
+      ptr->match_init = NULL;
+      ptr->match_free = NULL;
+      ptr->match = match_prefix;
       break;
 
     case xcmd_match_strip_prefix:
-      ptr->match = &match_strip_prefix;
+      debug("Match items on common stripped prefix.");
+      ptr->match_init = NULL;
+      ptr->match_free = NULL;
+      ptr->match = match_strip_prefix;
+      break;
+
+    case xcmd_match_regex:
+      debug("Match items on regular expression.");
+      ptr->match_init = cfg->case_insensitive ? match_regex_init_icase : match_regex_init_case;
+      ptr->match_free = match_regex_free;
+      ptr->match = match_regex;
       break;
 
     /* As the match-function is required, fail here */
-    case xcmd_match_none: die("Invalid match-algorithm!");
+    case xcmd_match_none:
+      die("Invalid match-algorithm!");
   } /* if ... */
 
   /* Prompt */
@@ -65,20 +99,40 @@ void xcmd_destroy(xcmd_t *ptr)
   if(!ptr) return;
 
   /* Free items */
-  ptr->matching_count = 0;
-  ptr->selected_item = 0;
-  g_list_free(ptr->matching_items);
-  g_list_free_full(ptr->all_items, (GDestroyNotify)free);
+  free(ptr->all_items.index);
+  free(ptr->all_items.data);
+  free(ptr->matches.index);
+  free(ptr->matches.shadow);
+  ptr->all_items.index = NULL;
+  ptr->all_items.data = NULL;
+  ptr->matches.index  = NULL;
+  ptr->matches.shadow = NULL;
+  ptr->matches.count = 0;
+  ptr->matches.selected = 0;
 
   /* Model functions */
   ptr->strncmp = NULL;
+
+  if(ptr->complete_free) ptr->complete_free(ptr, ptr->complete_data);
+  ptr->complete_init = NULL;
+  ptr->complete_free = NULL;
+  ptr->complete_data = NULL;
   ptr->complete = NULL;
+
+  if(ptr->match_free) ptr->match_free(ptr, ptr->match_data);
+  ptr->match_init = NULL;
+  ptr->match_free = NULL;
+  ptr->match_data = NULL;
   ptr->match = NULL;
 
   /* MVC */
   ptr->observer = NULL;
   ptr->observer_data = NULL;
   ptr->has_changed = 0;
+
+  /* Prompt */
+  free(ptr->prompt);
+  ptr->prompt = NULL;
 }
 
 int xcmd_read_items(xcmd_t *ptr, FILE *f)
@@ -86,6 +140,13 @@ int xcmd_read_items(xcmd_t *ptr, FILE *f)
   assert(ptr);
   assert(f);
   debug("Read items from input stream.");
+
+  /* Dynamic buffer, that will be saved in ptr. */
+  assert2(!ptr->all_items.data, "Items have already been initialized!");
+  ptr->all_items.count = 0;
+  const size_t block_size = 1024;
+  size_t buffer_max_size = 0;
+  size_t buffer_size = 0;
 
   char *line = NULL;
   size_t line_size = 0;
@@ -95,23 +156,25 @@ int xcmd_read_items(xcmd_t *ptr, FILE *f)
     /* Remove trailing newline character */
     *(line + n_bytes - 1) = '\0';
 
-    assert2(!xcmd_add_item(ptr, line), "Cannot add item ˋ%s'!", line);
+    /* Grow buffer */
+    const size_t old_buffer_size = buffer_size;
+    buffer_size += n_bytes;
+
+    if(buffer_max_size <= buffer_size) {
+      const size_t n_blocks = 1 + buffer_size / block_size;
+      buffer_max_size = n_blocks * block_size;
+      ptr->all_items.data = (char*)xrealloc(ptr->all_items.data, buffer_max_size);
+    } /* if ... */
+
+    memcpy(ptr->all_items.data + old_buffer_size, line, n_bytes);
+    ptr->all_items.count += 1;
+
   } /* while ... */
   assert2(feof(f), "Cannot read input: %m");
 
   free(line);
+  line = NULL;
 
-  return 0;
-}
-
-int xcmd_add_item(xcmd_t *ptr, const char *s)
-{
-  assert(ptr);
-  warn_if(!s, "Ignore empty item.");
-  if(!s) return 0;
-
-  debug("Add item ˋ%s'.", s);
-  ptr->all_items = g_list_prepend(ptr->all_items, xstrdup(s));
   return 0;
 }
 
@@ -120,10 +183,27 @@ int xcmd_finish_items(xcmd_t *ptr)
   assert(ptr);
   debug("Finish list of items.");
 
-  ptr->all_items = g_list_reverse(ptr->all_items);
-  ptr->matching_items = g_list_copy(ptr->all_items);
-  ptr->matching_count = g_list_length(ptr->matching_items);
-  ptr->selected_item = 0;
+  /* Allocate indexes */
+  assert2(!ptr->all_items.index, "Items have already been finished!");
+  assert2(0 < ptr->all_items.count, "No data!");
+  ptr->all_items.index = (char**)xmalloc(ptr->all_items.count * sizeof(char*));
+  ptr->matches.index  = (char**)xmalloc(ptr->all_items.count * sizeof(char*));
+  ptr->matches.shadow = (char**)xmalloc(ptr->all_items.count * sizeof(char*));
+  ptr->matches.count = ptr->all_items.count;
+  ptr->matches.selected = 0;
+
+  /* Fill indexes */
+  char *x = ptr->all_items.data;
+  char **it = ptr->all_items.index;
+  char **const end = ptr->all_items.index + ptr->all_items.count;
+
+  for(it = ptr->all_items.index; end != it; it += 1) {
+    *it = x;
+    /* Advance buffer by length of string and the NUL-byte */
+    x += 1 + strlen(x);
+  } /* for ... */
+
+  memcpy(ptr->matches.index, ptr->all_items.index, ptr->all_items.count * sizeof(char*));
 
   /* Notify observer, as the model has changed */
   ptr->has_changed = 1;
@@ -136,46 +216,65 @@ int xcmd_update_matching(xcmd_t *ptr, const char *input)
 {
   assert(ptr);
   debug("Update matching items using input ˋ%s'.", input);
+  
+  const size_t old_count = ptr->matches.count;
 
   if(!input || !strlen(input)) {
     /* Select all items, if input is empty */
-    g_list_free(ptr->matching_items);
-    ptr->matching_items = g_list_copy(ptr->all_items);
+    memcpy(ptr->matches.shadow, ptr->all_items.index, ptr->all_items.count * sizeof(char*));
+    ptr->matches.count = ptr->all_items.count;
 
   } else {
     /* Select from matching items */
-    GList *new_matching_items = NULL;
-    GList *it;
+    ptr->match_ok = 0;  /* Reset */
+
+    if(ptr->match_init) {
+      /* Initialize matching data */
+      ptr->match_data = ptr->match_init(ptr, input);
+    } else {
+      /* Without init-function, match_data is always usable. */
+      ptr->match_ok = 1;
+    } /* if ... */
+
+    /* No changes will occur, if the data isn't usable */
+    if(!ptr->match_ok) return -1;
 
     /* Require match-function to be set */
     assert(ptr->match);
 
-    for(it = ptr->matching_items; it; it = g_list_next(it)) {
-      char *item = (char*)it->data;
-      debug("Matching item ˋ%s' and input ˋ%s'.", item, input);
+    char **it;
+    char **const end = ptr->all_items.index + ptr->all_items.count;
+    ptr->matches.count = 0;
 
+    /* Use double buffering-tchnique to calculate matches */
+    for(it = ptr->all_items.index; end != it; it += 1) {
       /* If item doesn't match the input, go to the next one. */
-      if((*ptr->match)(ptr, input, item)) continue;
+      if(!ptr->match(ptr, input, *it, ptr->match_data)) continue;
 
-      new_matching_items = g_list_prepend(new_matching_items, item);
+      *(ptr->matches.shadow + ptr->matches.count) = *it;
+      ptr->matches.count += 1;
     } /* for ... */
 
-    g_list_free(ptr->matching_items);
-    ptr->matching_items = g_list_reverse(new_matching_items);
+    if(ptr->match_free) {
+      ptr->match_free(ptr, ptr->match_data);
+      ptr->match_data = NULL;
+    } /* if ... */
   } /* if ... */
 
   /* Select first matching item */
-  ptr->matching_count = g_list_length(ptr->matching_items);
-  ptr->selected_item = 0;
+  ptr->matches.selected = 0;
 
-  /* Notify observer, as the model has changed */
-  ptr->has_changed = 1;
+  /* Detect changes to double buffer */
+  ptr->has_changed = (old_count != ptr->matches.count) 
+      || memcmp(ptr->matches.index, ptr->matches.shadow, ptr->matches.count * sizeof(char*));
+
+  memcpy(ptr->matches.index, ptr->matches.shadow, ptr->matches.count * sizeof(char*));
   xcmd_notify_observer(ptr);
 
   return 0;
 }
 
-int xcmd_update_selected(xcmd_t *ptr, const int offset)
+int xcmd_update_selected(xcmd_t *ptr, const long offset, const int relative)
 {
   assert(ptr);
   debug("Update selected item.");
@@ -183,21 +282,28 @@ int xcmd_update_selected(xcmd_t *ptr, const int offset)
   /* An offset of 0 doesn't change anything */
   if(!offset) return 0;
 
-  const size_t old_selected_item = ptr->selected_item;
-  ptr->selected_item += offset;
-  ptr->selected_item %= ptr->matching_count;
-  // if(0 < offset) {
-  //   /* Don't go beyond last element */
-  //   ptr->selected_item += ((ptr->selected_item + 1) < ptr->matching_count) ? 1 : 0;
-  // } else {
-  //   /* Don't go beyond first element */
-  //   ptr->selected_item -= ptr->selected_item ? 1 : 0;
-  // } /* if ... */
+  /* No data */
+  if(!ptr->matches.count) return 0;
 
-  assert(!ptr->matching_count || (ptr->selected_item < ptr->matching_count));
+  const size_t old_selected_item = ptr->matches.selected;
+  if(relative) {
+    const long yz = (long)ptr->matches.count;
+    const long dx = clip(offset, -yz, +yz);
+    const long dn = (0 <= offset) ? 0 : ptr->matches.count;
+    const long ds = dn + dx;
+    assert(0 <= ds);
+
+    ptr->matches.selected += ds;
+    ptr->matches.selected %= ptr->matches.count;
+
+  } else {
+    /* Select absolute element */
+      const size_t hi = ptr->matches.count;
+    ptr->matches.selected = clip(offset, 0, hi - (hi ? 1 : 0));
+  } /* if ... */
 
   /* Notify observer, as the model has changed */
-  ptr->has_changed |= (old_selected_item != ptr->selected_item);
+  ptr->has_changed |= (old_selected_item != ptr->matches.selected);
   xcmd_notify_observer(ptr);
 
   return 0;
@@ -210,7 +316,7 @@ int xcmd_auto_complete(const xcmd_t *ptr, char **inputptr, size_t *n)
   assert(n);
 
   /* No data --> No auto-complete */
-  if(!ptr->matching_items) return 0;
+  if(!ptr->matches.count) return 0;
 
   /* No auto-complete function */
   if(!ptr->complete) return 0;
@@ -221,7 +327,7 @@ int xcmd_auto_complete(const xcmd_t *ptr, char **inputptr, size_t *n)
    * +1: Success, changes made by auto-complete
    */
   debug("Run auto-complete.");
-  return (*ptr->complete)(ptr, inputptr, n);
+  return ptr->complete(ptr, inputptr, n, ptr->complete_data);
 }
 
 int xcmd_notify_observer(xcmd_t *ptr)
@@ -241,29 +347,31 @@ int xcmd_notify_observer(xcmd_t *ptr)
   return 0;
 }
 
-/* Match functions */
-int match_prefix(const xcmd_t *ptr, const char *input, const char *text)
+/* Match: Prefix */
+int match_prefix(const xcmd_t *ptr, const char *input, const char *text, const void *data)
 {
   assert(ptr);
   assert(input);
   assert(text);
   assert(ptr->strncmp);
+  debug("Match input ˋ%s' against text ˋ%s'.", input, text);
 
   /* Get minimum length of input and text */
   const size_t input_size = strlen(input);
   const size_t text_size = strlen(text);
 
   /* This is the case, when input is no longer a prefix of text */
-  if(text_size < input_size) return +1;
+  if(text_size < input_size) return 0;
 
-  return (*ptr->strncmp)(input, text, input_size);
+  return !ptr->strncmp(input, text, input_size);
 }
 
-int match_strip_prefix(const xcmd_t *ptr, const char *input, const char *text)
+int match_strip_prefix(const xcmd_t *ptr, const char *input, const char *text, const void *data)
 {
   assert(ptr);
   assert(input);
   assert(text);
+  debug("Match stripped input ˋ%s' against text ˋ%s'.", input, text);
 
   /* Strip leading white space characters of input */
   while(('\0' != *input) && isspace(*input)) {
@@ -275,7 +383,56 @@ int match_strip_prefix(const xcmd_t *ptr, const char *input, const char *text)
     text += 1;
   } /* while ... */
 
-  return match_prefix(ptr, input, text);
+  return match_prefix(ptr, input, text, data);
+}
+
+/* Match: Regex */
+int match_regex(const xcmd_t *ptr, const char *input, const char *text, const void *data)
+{
+  assert(ptr);
+  assert(input);
+  assert(text);
+
+  /* Check for regular expression */
+  if(!data) return 0;
+
+  const regex_t *reg = (const regex_t*)data;
+  return (REG_NOMATCH != regexec(reg, text, 0, NULL, 0));
+}
+
+void *match_regex_initx(xcmd_t *ptr, const char *input, const int flags)
+{
+  assert(ptr);
+  assert(input);
+
+  regex_t reg, *p_reg;
+  if(regcomp(&reg, input, REG_EXTENDED | REG_NOSUB | flags)) {
+    /* `regcomp(3)' failed */
+    ptr->match_ok = 0;
+    return NULL;
+  } /* if ... */
+
+  const size_t n = sizeof(regex_t);
+  p_reg = (regex_t*)xmalloc(n);
+  memcpy(p_reg, &reg, n);
+  ptr->match_ok = 1;
+  return p_reg;
+}
+
+void *match_regex_init_case(xcmd_t *ptr, const char *input)
+{
+  return match_regex_initx(ptr, input, 0);
+}
+
+void *match_regex_init_icase(xcmd_t *ptr, const char *input)
+{
+  return match_regex_initx(ptr, input, REG_ICASE);
+}
+
+void match_regex_free(const xcmd_t *ptr, void *data)
+{
+  assert(ptr);
+  free(data);
 }
 
 /* Configuration */
