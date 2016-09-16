@@ -1,13 +1,10 @@
+#include "clip.h"
 #include "xcmd.h"
 #include "utils.h"
 #include <ctype.h>
 #include <regex.h>
 #include <stdlib.h>
 #include <string.h>
-
-#define min(x, y)     (((x) < (y)) ? (x) : (y))
-#define max(x, y)     (((x) > (y)) ? (x) : (y))
-#define clip(x, y, z) max(min(x, z), y)
 
 static void *match_regex_initx(xcmd_t *ptr, const char *input, const int flags);
 
