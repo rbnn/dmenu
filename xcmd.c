@@ -95,6 +95,12 @@ void xcmd_destroy(xcmd_t *ptr)
   /* Don't destroy NULL-pointer */
   if(!ptr) return;
 
+  /* Free auto-complete data */
+  if(ptr->complete_free) {
+    ptr->complete_free(ptr, ptr->complete_data);
+    ptr->complete_data = NULL;
+  } /* if ... */
+
   /* Free items */
   free(ptr->all_items.index);
   free(ptr->all_items.data);
@@ -201,6 +207,9 @@ int xcmd_finish_items(xcmd_t *ptr)
   } /* for ... */
 
   memcpy(ptr->matches.index, ptr->all_items.index, ptr->all_items.count * sizeof(char*));
+
+  /* Update auto-complete data */
+  if(ptr->complete_init) ptr->complete_data = ptr->complete_init(ptr);
 
   /* Notify observer, as the model has changed */
   ptr->has_changed = 1;
