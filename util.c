@@ -1,35 +1,38 @@
 /* See LICENSE file for copyright and license details. */
-#include <stdarg.h>
-#include <stdio.h>
+#include "util.h"
 #include <stdlib.h>
 #include <string.h>
 
-#include "util.h"
-
-void *
-ecalloc(size_t nmemb, size_t size)
+void *xmalloc(const size_t s)
 {
-	void *p;
+  void *ptr = s ? malloc(s) : NULL;
+  assert2(!s || ptr, "Cannot allocate %lu bytes: %m", s);
 
-	if (!(p = calloc(nmemb, size)))
-		perror(NULL);
-	return p;
+  return ptr;
 }
 
-void
-die(const char *fmt, ...) {
-	va_list ap;
+void *xrealloc(void *ptr, const size_t s)
+{
+  void *new_ptr = realloc(ptr, s);
+  assert2(!s || new_ptr, "Cannot re-allocate %lu bytes: %m", s);
 
-	va_start(ap, fmt);
-	vfprintf(stderr, fmt, ap);
-	va_end(ap);
+  return new_ptr;
+}
 
-	if (fmt[0] && fmt[strlen(fmt)-1] == ':') {
-		fputc(' ', stderr);
-		perror(NULL);
-	} else {
-		fputc('\n', stderr);
-	}
+char *xstrdup(const char *s)
+{
+  assert(s);
 
-	exit(1);
+  return xstrndup(s, strlen(s));
+}
+
+char *xstrndup(const char *s, const size_t n)
+{
+  assert(s);
+
+  char *cpy = (char*)xmalloc(1 + n);
+  memcpy(cpy, s, n);
+  *(cpy + n) = '\0';
+
+  return cpy;
 }
