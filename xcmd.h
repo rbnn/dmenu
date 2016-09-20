@@ -226,7 +226,7 @@ void xcmd_destroy(xcmd_t *ptr);
  * function returns zero, otherwise a non-zero value is returned.
  */
 int xcmd_read_items(xcmd_t *ptr, FILE *f);
-//int xcmd_add_item(xcmd_t *ptr, const char *s);
+
 /** \brief Complete list of items
  *
  * After complete reading or inserting items, this function will calculate the
@@ -235,6 +235,7 @@ int xcmd_read_items(xcmd_t *ptr, FILE *f);
  * success this function returns zero, otherwise a non-zero value is returned.
  */
 int xcmd_finish_items(xcmd_t *ptr);
+
 /** \brief Update the \c index of \c matches
  *
  * The function will select all items into \c matches, where the function \c
@@ -244,6 +245,7 @@ int xcmd_finish_items(xcmd_t *ptr);
  * observers about the changes made.
  */
 int xcmd_update_matching(xcmd_t *ptr, const char *input);
+
 /** \brief Update the selected item
  *
  * The function changes the currently selected item. If \c relative is set
@@ -253,6 +255,13 @@ int xcmd_update_matching(xcmd_t *ptr, const char *input);
  * Otherwise a non-zero value is returned.
  */
 int xcmd_update_selected(xcmd_t *ptr, const long offset, const int relative);
+
+/** \brief Complete input
+ *
+ * The function tries to complete the pointed to by \c inputptr using the
+ * installed completion-function. When resizing the input text, \c n is
+ * updated.
+ */
 int xcmd_auto_complete(const xcmd_t *ptr, char **inputptr, size_t *n);
 
 /** \brief Notify observer

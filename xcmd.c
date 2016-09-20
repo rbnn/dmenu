@@ -1,6 +1,6 @@
 #include "clip.h"
 #include "xcmd.h"
-#include "utils.h"
+#include "util.h"
 #include <ctype.h>
 #include <regex.h>
 #include <stdlib.h>
