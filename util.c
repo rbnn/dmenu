@@ -1,6 +1,5 @@
 /* See LICENSE file for copyright and license details. */
 #include "util.h"
-#include <stdlib.h>
 #include <string.h>
 
 void *xmalloc(const size_t s)

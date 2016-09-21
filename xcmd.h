@@ -1,5 +1,6 @@
 #ifndef XCMD_H
 #define XCMD_H
+#include <glib.h>
 #include <stdio.h>
 
 typedef struct xcmd xcmd_t;
@@ -31,7 +32,7 @@ struct xcmd
     char *data;
     /** \brief Number of items stored */
     size_t count;
-  } all_items;
+  } items;
 
   /** \brief Container for a subset of items */
   struct
@@ -48,6 +49,10 @@ struct xcmd
     size_t count;
     /** \brief Currently selectet item in subset */
     size_t selected;
+    /** \brief Input for last successfull match */
+    const char *input;
+    /** \brief Auto complete text */
+    GString *complete;
   } matches;
 
   /** \brief String comparison function
@@ -199,8 +204,6 @@ struct xcmd_config
    * installs \c strncmp.
    */
   int         case_insensitive;
-  // deprecated
-  char       *prompt;
 };
 
 /** \brief Initialize instance
@@ -262,7 +265,7 @@ int xcmd_update_selected(xcmd_t *ptr, const long offset, const int relative);
  * installed completion-function. When resizing the input text, \c n is
  * updated.
  */
-int xcmd_auto_complete(const xcmd_t *ptr, char **inputptr, size_t *n);
+int xcmd_auto_complete(xcmd_t *ptr);
 
 /** \brief Notify observer
  *

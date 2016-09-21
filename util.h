@@ -1,16 +1,9 @@
 /* See LICENSE file for copyright and license details. */
 #ifndef DMENU_UTIL_H
 #define DMENU_UTIL_H
+#include "clip.h"
 #include <stdio.h>
-
-#define max(x, y)       (((x) > (y)) ? (x) : (y))
-#define min(x, y)       (((x) < (y)) ? (x) : (y))
-/** \brief Clip \c x on \c y and \c z
- *
- * Returns \c y, \c z or \c x if \c x is less than \c y, greater than \c z.
- */
-#define clip(x, y, z)   max(y, min(z, x))
-#define is_betweeen(x, y, z)    (((y) <= (x)) && ((x) <= (z)))
+#include <stdlib.h>
 
 /* Debugging macros: debug(...), warn_if(...), assert(x) and assert2(x,...) */
 #ifndef NDEBUG

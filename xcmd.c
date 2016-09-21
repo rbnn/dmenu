@@ -2,6 +2,7 @@
 #include "xcmd.h"
 #include "util.h"
 #include <ctype.h>
+#include <glib.h>
 #include <regex.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,13 +16,15 @@ void xcmd_init(xcmd_t *ptr, const xcfg_t *cfg)
   debug("Initialize xcmd-model.");
 
   /* Initialize items */
-  ptr->all_items.index = NULL;
-  ptr->all_items.data  = 0;
-  ptr->all_items.count = 0;
+  ptr->items.index = NULL;
+  ptr->items.data  = 0;
+  ptr->items.count = 0;
   ptr->matches.index   = NULL;
   ptr->matches.shadow  = NULL;
   ptr->matches.count = 0;
   ptr->matches.selected = 0;
+  ptr->matches.input = NULL;
+  ptr->matches.complete = g_string_new(NULL);
 
   /* Select appropriate configuration */
   debug("Apply %s configuration.", cfg ? "default" : "user");
@@ -81,9 +84,6 @@ void xcmd_init(xcmd_t *ptr, const xcfg_t *cfg)
       die("Invalid match-algorithm!");
   } /* if ... */
 
-  /* Prompt */
-  ptr->prompt = cfg->prompt;
-
   /* MVC */
   ptr->observer = NULL;
   ptr->observer_data = NULL;
@@ -102,16 +102,18 @@ void xcmd_destroy(xcmd_t *ptr)
   } /* if ... */
 
   /* Free items */
-  free(ptr->all_items.index);
-  free(ptr->all_items.data);
+  free(ptr->items.index);
+  free(ptr->items.data);
   free(ptr->matches.index);
   free(ptr->matches.shadow);
-  ptr->all_items.index = NULL;
-  ptr->all_items.data = NULL;
+  ptr->items.index = NULL;
+  ptr->items.data = NULL;
   ptr->matches.index  = NULL;
   ptr->matches.shadow = NULL;
   ptr->matches.count = 0;
   ptr->matches.selected = 0;
+  g_string_free(ptr->matches.complete, TRUE);
+  ptr->matches.complete = NULL;
 
   /* Model functions */
   ptr->strncmp = NULL;
@@ -145,8 +147,8 @@ int xcmd_read_items(xcmd_t *ptr, FILE *f)
   debug("Read items from input stream.");
 
   /* Dynamic buffer, that will be saved in ptr. */
-  assert2(!ptr->all_items.data, "Items have already been initialized!");
-  ptr->all_items.count = 0;
+  assert2(!ptr->items.data, "Items have already been initialized!");
+  ptr->items.count = 0;
   const size_t block_size = 1024;
   size_t buffer_max_size = 0;
   size_t buffer_size = 0;
@@ -166,11 +168,11 @@ int xcmd_read_items(xcmd_t *ptr, FILE *f)
     if(buffer_max_size <= buffer_size) {
       const size_t n_blocks = 1 + buffer_size / block_size;
       buffer_max_size = n_blocks * block_size;
-      ptr->all_items.data = (char*)xrealloc(ptr->all_items.data, buffer_max_size);
+      ptr->items.data = (char*)xrealloc(ptr->items.data, buffer_max_size);
     } /* if ... */
 
-    memcpy(ptr->all_items.data + old_buffer_size, line, n_bytes);
-    ptr->all_items.count += 1;
+    memcpy(ptr->items.data + old_buffer_size, line, n_bytes);
+    ptr->items.count += 1;
 
   } /* while ... */
   assert2(feof(f), "Cannot read input: %m");
@@ -187,26 +189,29 @@ int xcmd_finish_items(xcmd_t *ptr)
   debug("Finish list of items.");
 
   /* Allocate indexes */
-  assert2(!ptr->all_items.index, "Items have already been finished!");
-  assert2(0 < ptr->all_items.count, "No data!");
-  ptr->all_items.index = (char**)xmalloc(ptr->all_items.count * sizeof(char*));
-  ptr->matches.index  = (char**)xmalloc(ptr->all_items.count * sizeof(char*));
-  ptr->matches.shadow = (char**)xmalloc(ptr->all_items.count * sizeof(char*));
-  ptr->matches.count = ptr->all_items.count;
+  assert2(!ptr->items.index, "Items have already been finished!");
+  assert2(0 < ptr->items.count, "No data!");
+  ptr->items.index = (char**)xmalloc(ptr->items.count * sizeof(char*));
+  ptr->matches.index  = (char**)xmalloc(ptr->items.count * sizeof(char*));
+  ptr->matches.shadow = (char**)xmalloc(ptr->items.count * sizeof(char*));
+  ptr->matches.count = ptr->items.count;
   ptr->matches.selected = 0;
 
   /* Fill indexes */
-  char *x = ptr->all_items.data;
-  char **it = ptr->all_items.index;
-  char **const end = ptr->all_items.index + ptr->all_items.count;
+  char *x = ptr->items.data;
+  char **it = ptr->items.index;
+  char **const end = ptr->items.index + ptr->items.count;
 
-  for(it = ptr->all_items.index; end != it; it += 1) {
+  for(it = ptr->items.index; end != it; it += 1) {
     *it = x;
     /* Advance buffer by length of string and the NUL-byte */
-    x += 1 + strlen(x);
+    const size_t len = strlen(x);
+    x += 1 + len;
+
+    assert2(TRUE == g_utf8_validate(*it, len, NULL), "Found invalid UTF-8 string in element %lu!", it - ptr->items.index);
   } /* for ... */
 
-  memcpy(ptr->matches.index, ptr->all_items.index, ptr->all_items.count * sizeof(char*));
+  memcpy(ptr->matches.index, ptr->items.index, ptr->items.count * sizeof(char*));
 
   /* Update auto-complete data */
   if(ptr->complete_init) ptr->complete_data = ptr->complete_init(ptr);
@@ -227,8 +232,8 @@ int xcmd_update_matching(xcmd_t *ptr, const char *input)
 
   if(!input || !strlen(input)) {
     /* Select all items, if input is empty */
-    memcpy(ptr->matches.shadow, ptr->all_items.index, ptr->all_items.count * sizeof(char*));
-    ptr->matches.count = ptr->all_items.count;
+    memcpy(ptr->matches.shadow, ptr->items.index, ptr->items.count * sizeof(char*));
+    ptr->matches.count = ptr->items.count;
 
   } else {
     /* Select from matching items */
@@ -249,11 +254,11 @@ int xcmd_update_matching(xcmd_t *ptr, const char *input)
     assert(ptr->match);
 
     char **it;
-    char **const end = ptr->all_items.index + ptr->all_items.count;
+    char **const end = ptr->items.index + ptr->items.count;
     ptr->matches.count = 0;
 
     /* Use double buffering-tchnique to calculate matches */
-    for(it = ptr->all_items.index; end != it; it += 1) {
+    for(it = ptr->items.index; end != it; it += 1) {
       /* If item doesn't match the input, go to the next one. */
       if(!ptr->match(ptr, input, *it, ptr->match_data)) continue;
 
@@ -269,9 +274,10 @@ int xcmd_update_matching(xcmd_t *ptr, const char *input)
 
   /* Select first matching item */
   ptr->matches.selected = 0;
+  ptr->matches.input = input;
 
   /* Detect changes to double buffer */
-  ptr->has_changed = (old_count != ptr->matches.count) 
+  ptr->has_changed |= (old_count != ptr->matches.count) 
       || memcmp(ptr->matches.index, ptr->matches.shadow, ptr->matches.count * sizeof(char*));
 
   memcpy(ptr->matches.index, ptr->matches.shadow, ptr->matches.count * sizeof(char*));
@@ -304,7 +310,7 @@ int xcmd_update_selected(xcmd_t *ptr, const long offset, const int relative)
 
   } else {
     /* Select absolute element */
-      const size_t hi = ptr->matches.count;
+    const size_t hi = ptr->matches.count;
     ptr->matches.selected = clip(offset, 0, hi - (hi ? 1 : 0));
   } /* if ... */
 
@@ -315,17 +321,15 @@ int xcmd_update_selected(xcmd_t *ptr, const long offset, const int relative)
   return 0;
 }
 
-int xcmd_auto_complete(const xcmd_t *ptr, char **inputptr, size_t *n)
+int xcmd_auto_complete(xcmd_t *ptr)
 {
   assert(ptr);
-  assert(inputptr);
-  assert(n);
 
   /* No data --> No auto-complete */
   if(!ptr->matches.count) return 0;
 
-  /* No auto-complete function */
-  if(!ptr->complete) return 0;
+  // /* No auto-complete function */
+  // if(!ptr->complete) return 0;
 
   /* On error ptr->complete() must not change inputpr. Return values are:
    * -1: Auto-complete failed
@@ -333,7 +337,29 @@ int xcmd_auto_complete(const xcmd_t *ptr, char **inputptr, size_t *n)
    * +1: Success, changes made by auto-complete
    */
   debug("Run auto-complete.");
-  return ptr->complete(ptr, inputptr, n, ptr->complete_data);
+
+
+  char **it = ptr->matches.index;
+  char **const end = ptr->matches.index + ptr->matches.count;
+  GString *str = g_string_overwrite(ptr->matches.complete, 0, *it);
+  it += 1;
+
+  while(end != it) {
+    while(str->len && strncmp(str->str, *it, str->len)) {
+      debug("Complete? `%s' -- `%s'", str->str, *it);
+      str = g_string_truncate(str, str->len - 1);
+    } /* while ... */
+    it += 1;
+  }
+
+  if(str->len) {
+    ptr->matches.input = str->str;
+    return 1;
+
+  } else {
+    return 0;
+
+  } /* if ... */
 }
 
 int xcmd_notify_observer(xcmd_t *ptr)
@@ -451,7 +477,6 @@ int xcmd_config_default(xcfg_t *ptr)
   ptr->match = xcmd_match_prefix;
   ptr->complete = xcmd_complete_none;
   ptr->case_insensitive = 1;
-  ptr->prompt = xstrdup("~>");
 
   return 0;
 }
