@@ -16,54 +16,6 @@
 #endif
 #include <X11/Xft/Xft.h>
 
-#ifdef DISABLED
-/* macros */
-#define INTERSECT(x,y,w,h,r)  (MAX(0, MIN((x)+(w),(r).x_org+(r).width)  - MAX((x),(r).x_org)) \
-                             * MAX(0, MIN((y)+(h),(r).y_org+(r).height) - MAX((y),(r).y_org)))
-#define LENGTH(X)             (sizeof X / sizeof X[0])
-#define TEXTW(X)              (drw_fontset_getwidth(drw, (X)) + lrpad)
-
-/* enums */
-enum { SchemeNorm, SchemeSel, SchemeOut, SchemeLast }; /* color schemes */
-
-struct item {
-	char *text;
-	struct item *left, *right;
-	int out;
-};
-
-#define MATCH_ALGO_TOKEN    "token"
-#define MATCH_ALGO_PREFIX   "prefix"
-#define MATCH_ALGO_DEFAULT  MATCH_ALGO_TOKEN
-
-#define AUTO_COMPLETE_ALGO_PREFIX   "prefix"
-#define AUTO_COMPLETE_ALGO_DEFAULT  AUTO_COMPLETE_ALGO_PREFIX
-
-static char text[BUFSIZ] = "";
-static int bh, mw, mh;
-static int sw, sh; /* X display screen geometry width, height */
-static int inputw = 0, promptw;
-static int lrpad; /* sum of left and right padding */
-static size_t cursor;
-static struct item *items = NULL;
-static struct item *matches, *matchend;
-static struct item *prev, *curr, *next, *sel;
-static int mon = -1, screen;
-static char *match_algo = MATCH_ALGO_DEFAULT;
-static char *auto_complete_algo = AUTO_COMPLETE_ALGO_DEFAULT;
-static void(*match_func)(void) = NULL;
-static void(*auto_complete_func)(void) = NULL;
-static config_t configuration;
-
-static Atom clip, utf8;
-static Display *dpy;
-static Window root, win;
-static XIC xic;
-
-static Drw *drw;
-static Clr *scheme[SchemeLast];
-#endif /* DISABLED */
-
 /* static char const optstr[] = "ac::hfil:p:m:vx::"; */
 static char const optstr[] = "bhfil:p:m:v";
 static struct option optlng[] =
@@ -103,24 +55,6 @@ enum demenu_colorscheme
 #ifdef DISABLED
 
 static void
-calcoffsets(void)
-{
-	int i, n;
-
-	if (lines > 0)
-		n = lines * bh;
-	else
-		n = mw - (promptw + inputw + TEXTW("<") + TEXTW(">"));
-	/* calculate which items will begin the next page and previous page */
-	for (i = 0, next = curr; next; next = next->right)
-		if ((i += (lines > 0) ? bh : MIN(TEXTW(next->text), n)) > n)
-			break;
-	for (i = 0, prev = curr; prev && prev->left; prev = prev->left)
-		if ((i += (lines > 0) ? bh : MIN(TEXTW(prev->left->text), n)) > n)
-			break;
-}
-
-static void
 cleanup(void)
 {
 	size_t i;
@@ -132,19 +66,6 @@ cleanup(void)
 	XSync(dpy, False);
 	XCloseDisplay(dpy);
 	config_destroy(&configuration);
-}
-
-static int
-drawitem(struct item *item, int x, int y, int w)
-{
-	if (item == sel)
-		drw_setscheme(drw, scheme[SchemeSel]);
-	else if (item->out)
-		drw_setscheme(drw, scheme[SchemeOut]);
-	else
-		drw_setscheme(drw, scheme[SchemeNorm]);
-
-	return drw_text(drw, x, y, w, bh, lrpad / 2, item->text, 0);
 }
 
 static void
@@ -269,221 +190,6 @@ auto_complete_longest_common_prefix(void)
   /* Free temporary memory */
   free(maxprefix);
   calcoffsets();
-}
-
-static void
-insert(const char *str, ssize_t n)
-{
-	if (strlen(text) + n > sizeof text - 1)
-		return;
-	/* move existing text out of the way, insert new text, and update cursor */
-	memmove(&text[cursor + n], &text[cursor], sizeof text - cursor - MAX(n, 0));
-	if (n > 0)
-		memcpy(&text[cursor], str, n);
-	cursor += n;
-	match_func();
-}
-
-static size_t
-nextrune(int inc)
-{
-	ssize_t n;
-
-	/* return location of next utf8 rune in the given direction (+1 or -1) */
-	for (n = cursor + inc; n + inc >= 0 && (text[n] & 0xc0) == 0x80; n += inc)
-		;
-	return n;
-}
-
-static void
-keypress(XKeyEvent *ev)
-{
-	char buf[32];
-	int len;
-	KeySym ksym = NoSymbol;
-	Status status;
-
-	len = XmbLookupString(xic, ev, buf, sizeof buf, &ksym, &status);
-	if (status == XBufferOverflow)
-		return;
-	if (ev->state & ControlMask)
-		switch(ksym) {
-		case XK_a: ksym = XK_Home;      break;
-		case XK_b: ksym = XK_Left;      break;
-		case XK_c: ksym = XK_Escape;    break;
-		case XK_d: ksym = XK_Delete;    break;
-		case XK_e: ksym = XK_End;       break;
-		case XK_f: ksym = XK_Right;     break;
-		case XK_g: ksym = XK_Escape;    break;
-		case XK_h: ksym = XK_BackSpace; break;
-		case XK_i: ksym = XK_Tab;       break;
-		case XK_j: /* fallthrough */
-		case XK_J: /* fallthrough */
-		case XK_m: /* fallthrough */
-		case XK_M: ksym = XK_Return; ev->state &= ~ControlMask; break;
-		case XK_n: ksym = XK_Down;      break;
-		case XK_p: ksym = XK_Up;        break;
-
-		case XK_k: /* delete right */
-			text[cursor] = '\0';
-			match_func();
-			break;
-		case XK_u: /* delete left */
-			insert(NULL, 0 - cursor);
-			break;
-		case XK_w: /* delete word */
-			while (cursor > 0 && strchr(worddelimiters, text[nextrune(-1)]))
-				insert(NULL, nextrune(-1) - cursor);
-			while (cursor > 0 && !strchr(worddelimiters, text[nextrune(-1)]))
-				insert(NULL, nextrune(-1) - cursor);
-			break;
-		case XK_y: /* paste selection */
-		case XK_Y:
-			XConvertSelection(dpy, (ev->state & ShiftMask) ? clip : XA_PRIMARY,
-			                  utf8, utf8, win, CurrentTime);
-			return;
-		case XK_Return:
-		case XK_KP_Enter:
-			break;
-		case XK_bracketleft:
-			cleanup();
-			exit(1);
-		default:
-			return;
-		}
-	else if (ev->state & Mod1Mask)
-		switch(ksym) {
-		case XK_g: ksym = XK_Home;  break;
-		case XK_G: ksym = XK_End;   break;
-		case XK_h: ksym = XK_Up;    break;
-		case XK_j: ksym = XK_Next;  break;
-		case XK_k: ksym = XK_Prior; break;
-		case XK_l: ksym = XK_Down;  break;
-		default:
-			return;
-		}
-	switch(ksym) {
-	default:
-		if (!iscntrl(*buf))
-			insert(buf, len);
-		break;
-	case XK_Delete:
-		if (text[cursor] == '\0')
-			return;
-		cursor = nextrune(+1);
-		/* fallthrough */
-	case XK_BackSpace:
-		if (cursor == 0)
-			return;
-		insert(NULL, nextrune(-1) - cursor);
-		break;
-	case XK_End:
-		if (text[cursor] != '\0') {
-			cursor = strlen(text);
-			break;
-		}
-		if (next) {
-			/* jump to end of list and position items in reverse */
-			curr = matchend;
-			calcoffsets();
-			curr = prev;
-			calcoffsets();
-			while (next && (curr = curr->right))
-				calcoffsets();
-		}
-		sel = matchend;
-		break;
-	case XK_Escape:
-		cleanup();
-		exit(1);
-	case XK_Home:
-		if (sel == matches) {
-			cursor = 0;
-			break;
-		}
-		sel = curr = matches;
-		calcoffsets();
-		break;
-	case XK_Left:
-		if (cursor > 0 && (!sel || !sel->left || lines > 0)) {
-			cursor = nextrune(-1);
-			break;
-		}
-		if (lines > 0)
-			return;
-		/* fallthrough */
-	case XK_Up:
-		if (sel && sel->left && (sel = sel->left)->right == curr) {
-			curr = prev;
-			calcoffsets();
-		}
-		break;
-	case XK_Next:
-		if (!next)
-			return;
-		sel = curr = next;
-		calcoffsets();
-		break;
-	case XK_Prior:
-		if (!prev)
-			return;
-		sel = curr = prev;
-		calcoffsets();
-		break;
-	case XK_Return:
-	case XK_KP_Enter:
-		puts((sel && !(ev->state & ShiftMask)) ? sel->text : text);
-		if (!(ev->state & ControlMask)) {
-			cleanup();
-			exit(0);
-		}
-		if (sel)
-			sel->out = 1;
-		break;
-	case XK_Right:
-		if (text[cursor] != '\0') {
-			cursor = nextrune(+1);
-			break;
-		}
-		if (lines > 0)
-			return;
-		/* fallthrough */
-	case XK_Down:
-		if (sel && sel->right && (sel = sel->right) == next) {
-			curr = next;
-			calcoffsets();
-		}
-		break;
-	case XK_Tab:
-		if (!sel)
-			return;
-		if(!auto_complete_func) {
-  		strncpy(text, sel->text, sizeof text - 1);
-	  	text[sizeof text - 1] = '\0';
-		  cursor = strlen(text);
-  		match_func();
-  	} else {
-  	  auto_complete_func();
-  	} /* if ... */
-		break;
-	}
-	drawmenu();
-}
-
-static void
-paste(void)
-{
-	char *p, *q;
-	int di;
-	unsigned long dl;
-	Atom da;
-
-	/* we have been given the current selection, now insert it into input */
-	XGetWindowProperty(dpy, win, utf8, 0, (sizeof text / 4) + 1, False,
-	                   utf8, &da, &di, &dl, &dl, (unsigned char **)&p);
-	insert(p, (q = strchr(p, '\n')) ? q - p : (ssize_t)strlen(p));
-	XFree(p);
-	drawmenu();
 }
 
 static void
@@ -618,7 +324,7 @@ struct dmenu_style
 };/*}}}*/
 
 struct dmenu_viewer
-{
+{/*{{{*/
   const dx11_t *x;  /* Handle to X window system */
 
   Window menu_hwnd;
@@ -659,7 +365,7 @@ struct dmenu_viewer
   } menu;
 
   int show_at_bottom;
-};
+};/*}}}*/
 
 struct dmenu_control
 {/*{{{*/
