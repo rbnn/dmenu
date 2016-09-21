@@ -476,7 +476,7 @@ int xcmd_config_default(xcfg_t *ptr)
 
   ptr->match = xcmd_match_prefix;
   ptr->complete = xcmd_complete_none;
-  ptr->case_insensitive = 1;
+  ptr->case_insensitive = 0;
 
   return 0;
 }
