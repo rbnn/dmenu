@@ -1,8 +1,22 @@
 #ifndef DMENU_VIEWER_H
 #define DMENU_VIEWER_H
+#include "x.h"
+#include "xcmd.h"
+
 typedef struct dmenu_viewer dview_t;
 typedef struct dmenu_font dfnt_t;
 typedef struct dmenu_style dstyle_t;
+
+enum demenu_colorscheme
+{/*{{{*/
+  dmenu_colorscheme_normal_even,
+  dmenu_colorscheme_normal_odd,
+  dmenu_colorscheme_select,
+  dmenu_colorscheme_prompt,
+  dmenu_colorscheme_input_good,
+  dmenu_colorscheme_input_bad,
+  dmenu_colorscheme_last
+};/*}}}*/
 
 struct dmenu_style
 {/*{{{*/
@@ -65,4 +79,10 @@ struct dmenu_viewer
 
   int show_at_bottom;
 };/*}}}*/
+
+extern const char *colors[dmenu_colorscheme_last][2];
+extern const char *fonts[];
+
+void init_viewer(dview_t *view, const dx11_t *x, const char *colornames[][2], const char *fontnames[]);
+void update_ui(dview_t *view, const xcmd_t *model);
 #endif /* DMENU_VIEWER_H */

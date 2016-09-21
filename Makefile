@@ -6,5 +6,5 @@ include config.mk
 CFLAGS += `pkg-config --cflags ${PACKAGES}`
 LDFLAGS += `pkg-config --libs ${PACKAGES}`
 
-dmenu: dmenu.o inputbuffer.o util.o xcmd.o
+dmenu: controller.o dmenu.o inputbuffer.o util.o viewer.o x.o xcmd.o
 	$(CC) -o $@ ${LDFLAGS} $?

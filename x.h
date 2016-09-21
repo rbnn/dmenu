@@ -21,4 +21,6 @@ struct dmenu_x11
   int width;
   int depth;
 };/*}}}*/
+
+void init_x11(dx11_t *x);
 #endif /* DMENU_X_H */
