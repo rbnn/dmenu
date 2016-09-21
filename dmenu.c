@@ -6,15 +6,6 @@
 #include <glib.h>
 #include <getopt.h>
 // #include <libconfig.h>
-#include <locale.h>
-
-#include <X11/Xlib.h>
-#include <X11/Xatom.h>
-#include <X11/Xutil.h>
-#ifdef XINERAMA
-#include <X11/extensions/Xinerama.h>
-#endif
-#include <X11/Xft/Xft.h>
 
 /* static char const optstr[] = "ac::hfil:p:m:vx::"; */
 static char const optstr[] = "bhfil:p:m:v";
@@ -298,22 +289,10 @@ usage(void)
 }
 
 typedef struct dmenu dmenu_t;
-typedef struct dmenu_x11 dx11_t;
-typedef struct dmenu_ui dui_t;
 
+#include "x.h"
 #include "viewer.h"
 #include "controller.h"
-
-struct dmenu_x11
-{/*{{{*/
-  Display *display;
-  int screen;
-  Window root;
-  int monitor;
-  int height;
-  int width;
-  int depth;
-};/*}}}*/
 
 /* Calculate width of bounding box around text */
 int get_textwidth(const dfnt_t *font, const char *text, size_t n)
@@ -980,15 +959,17 @@ void control_on_keypress(dctrl_t *control, xcmd_t *model, XKeyEvent *ev)
 	    has_changed = 1;
 	  	break;
 
-	  case XK_Up:   /* fallthrough */
-	  case XK_Prior:
+	  case XK_Up:
 	  	xcmd_update_selected(model, -1, 1);
 	  	break;
 
-	  case XK_Down:   /* fallthrough */
-	  case XK_Next:
+	  case XK_Down:
 	  	xcmd_update_selected(model, +1, 1);
 	  	break;
+
+	  case XK_Prior:  /* Page Up */
+	  case XK_Next:   /* Page Down */
+	    break;
 
 	  case XK_Return:   /* fallthrough */
 	  case XK_KP_Enter:
