@@ -2,6 +2,7 @@
 #include "inputbuffer.h"
 #include "util.h"
 #include "xcmd.h"
+#include <ctype.h>
 #include <glib.h>
 #include <getopt.h>
 // #include <libconfig.h>
