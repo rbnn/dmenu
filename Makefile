@@ -20,6 +20,7 @@ install: dmenu-release
 	@$(INSTALL) --strip --mode=755 {,${PREFIX}/bin/}dmenu
 	@$(INSTALL) --mode=755 {,${PREFIX}/bin/}dmenu_run
 	@$(INSTALL) --mode=755 {,${PREFIX}/bin/}dmenu-i3_run
+	@$(INSTALL) --mode=755 {,${PREFIX}/bin/}i3wm_commands.py
 
 uninstall:
 	@$(RM) ${PREFIX}/bin/{dmenu,dmenu_run,dmenu-i3_run}
