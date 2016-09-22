@@ -29,7 +29,7 @@ void init_control(dctrl_t *control, const dx11_t *x, const Window hwnd)
 }/*}}}*/
 
 void control_on_keypress(dctrl_t *control, xcmd_t *model, XKeyEvent *ev)
-{
+{/*{{{*/
   assert(ev);
   assert(model);
   assert(control);
@@ -192,10 +192,10 @@ void control_on_keypress(dctrl_t *control, xcmd_t *model, XKeyEvent *ev)
 
   model->has_changed = has_changed;
 	if(has_changed) xcmd_update_matching(model, inputbuffer_get_text(&control->input));
-}
+}/*}}}*/
 
 void run_control(dctrl_t *control, xcmd_t *model)
-{
+{/*{{{*/
   assert(control);
   assert(model);
   debug("Enter main control loop.");
@@ -240,4 +240,4 @@ void run_control(dctrl_t *control, xcmd_t *model)
 		  	break;
 		}
 	} /* while ... */
-}
+}/*}}}*/
