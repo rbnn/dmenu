@@ -78,31 +78,6 @@ match_sub_pattern(void)
 }
 
 static void
-match_common_prefix(void)
-{
-  struct item *item;
-  char const *tok = text;
-
-  matches = matchend = NULL;
-
-  while(isspace(*tok)) {
-    /* Eat up all white space */
-    tok += 1;
-  } /* while ... */
-
-  size_t const toksize = strlen(tok);
-  for(item = items; item && item->text; item++) {
-    /* Compare prefix and select only items with common prefix. */
-    if(!toksize || !fstrncmp(tok, item->text, toksize)) {
-      appenditem(item, &matches, &matchend);
-    } /* if ... */
-  } /* for ... */
-
-  curr = sel = matches;
-  calcoffsets();
-}
-
-static void
 auto_complete_longest_common_prefix(void)
 {
   struct item *item;
@@ -145,34 +120,6 @@ auto_complete_longest_common_prefix(void)
   /* Free temporary memory */
   free(maxprefix);
   calcoffsets();
-}
-
-static void
-run(void)
-{
-	XEvent ev;
-
-	while (!XNextEvent(dpy, &ev)) {
-		if (XFilterEvent(&ev, win))
-			continue;
-		switch(ev.type) {
-		case Expose:
-			if (ev.xexpose.count == 0)
-				drw_map(drw, win, 0, 0, mw, mh);
-			break;
-		case KeyPress:
-			keypress(&ev.xkey);
-			break;
-		case SelectionNotify:
-			if (ev.xselection.property == utf8)
-				paste();
-			break;
-		case VisibilityNotify:
-			if (ev.xvisibility.state != VisibilityUnobscured)
-				XRaiseWindow(dpy, win);
-			break;
-		}
-	}
 }
 
 static void
@@ -291,7 +238,7 @@ void dmenu_getopt(dx11_t *x, xcmd_t *model, dview_t *view, dctrl_t *control, int
 }/*}}}*/
 
 int main(int argc, char *argv[])
-{
+{/*{{{*/
   dx11_t x = {0};
   xcmd_t model;   /* M */
   dview_t view;   /* V */
@@ -344,4 +291,4 @@ int main(int argc, char *argv[])
 	} /* if ... */
 
 	return 1; /* unreachable */
-}
+}/*}}}*/
