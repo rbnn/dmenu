@@ -4,27 +4,24 @@
 const char *colors[dmenu_colorscheme_last][2] =
 {
 	/*                                    fg         bg       */
-	[dmenu_colorscheme_normal_even] = { "#bbbbbb", "#333333" },
-	[dmenu_colorscheme_normal_odd] =  { "#bbbbbb", "#111111" },
+	[dmenu_colorscheme_normal_even] = { "#bbbbbb", "#282828" },
+	[dmenu_colorscheme_normal_odd] =  { "#bbbbbb", "#333333" },
 	[dmenu_colorscheme_select] =      { "#eeeeee", "#005577" },
-	[dmenu_colorscheme_prompt] =      { "#eeeeee", "#335577" },
-  [dmenu_colorscheme_input_good] =  { "#bbbbbb", "#555555" },
-  [dmenu_colorscheme_input_bad]  =  { "#ffb0b0", "#555555" }
-	// [dmenu_colorscheme_normal_even] = { "#bbbbbb", "#222222" },
-	// [dmenu_colorscheme_normal_odd] =  { "#bbbbbb", "#111111" },
-	// [dmenu_colorscheme_select] =      { "#eeeeee", "#005577" },
-	// [dmenu_colorscheme_prompt] =      { "#eeeeee", "#005577" },
-  // [dmenu_colorscheme_input_good] =  { "#bbbbbb", "#222222" },
-  // [dmenu_colorscheme_input_bad]  =  { "#ffb0b0", "#222222" }
+	[dmenu_colorscheme_prompt] =      { "#eeeeee", "#005577" },
+  [dmenu_colorscheme_input_good] =  { "#bbbbbb", "#222222" },
+  [dmenu_colorscheme_input_bad]  =  { "#ffb0b0", "#222222" }
 };
 
 const char *fonts[] =
 {
-  "inconsolata:size=12",
-	"monospace:size=12",
+  "inconsolata:size=9",
+	"monospace:size=9",
 	/* "monospace:size=10", */
 	(char*)0
 };
+
+static void render_single_column_view(dview_t *view, int y, const xcmd_t *model);
+static void render_multiple_column_view(dview_t *view, int y, const xcmd_t *model);
 
 /* Calculate width of bounding box around text */
 int get_textwidth(const dfnt_t *font, const char *text, size_t n)
@@ -270,7 +267,7 @@ void setup_viewer(dview_t *view)
 	XMapRaised(view->x->display, view->menu_hwnd);
 }/*}}}*/
 
-void init_viewer(dview_t *view, const dx11_t *x, const char *colornames[][2], const char *fontnames[])
+void viewer_init(dview_t *view, const dx11_t *x, const char *colornames[][2], const char *fontnames[])
 {/*{{{*/
   assert(x);
   assert(view);
@@ -370,7 +367,7 @@ void draw_text(dview_t *view, const dstyle_t *style, int x, int y, int width, in
   draw_ntext(view, style, x, y, width, height, text, strlen(text));
 }/*}}}*/
 
-void update_ui(dview_t *view, const xcmd_t *model)
+void viewer_update(dview_t *view, const xcmd_t *model)
 {/*{{{*/
   assert(view);
   assert(model);
@@ -397,41 +394,109 @@ void update_ui(dview_t *view, const xcmd_t *model)
 
   debug("Draw input to user interface: x=%i, y=%i, width=%i, height=%i", x, y, view->input.width, view->menu.line_height);
 
-  if(model->matches.input) draw_text(view, &view->input.style_good, x, y,  view->input.width, view->menu.line_height, model->matches.input);
+  if(model->matches.input) {
+    if(model->match_ok) { 
+      draw_text(view, &view->input.style_good, x, y,  view->input.width, view->menu.line_height, model->matches.input);
+    } else {
+      draw_text(view, &view->input.style_bad, x, y,  view->input.width, view->menu.line_height, model->matches.input);
+    } /* if ... */
+  } /* if ... */
+  y += view->menu.line_height;
 
-	assert2(0 < view->menu.lines, "No other method implemented");
 
   /* Render menu items */
-	if(0 < view->menu.lines) {
+	if(0 < view->menu.lines) { 
+	  if(view->single_column || (model->matches.count <= view->menu.lines)) {
+	    render_single_column_view(view, y, model);
+	  } else {
+      /* By default render items in multiple individually sized columns, if
+       * there're enough items */
+  	  render_multiple_column_view(view, y, model);
+  	} /* if ... */
 
-    /* Identify page, where the selected item is placed on */
-    const size_t block = model->matches.selected / view->menu.lines;
-    const size_t idx_lo = block * view->menu.lines;
-    const size_t idx_hi = min(idx_lo + view->menu.lines, model->matches.count);
-    size_t i;
-  
-	  for(i = idx_lo; i < idx_hi; i += 1) {
-	    const int even_row_number = (idx_lo - i) % 2;
-	    const dstyle_t *item_style = even_row_number ? &view->menu.style_normal_even : &view->menu.style_normal_odd;
-	    const dstyle_t *slct_style = &view->menu.style_select;
-	    const char *item = model->matches.index[i];
-
-	    y += view->menu.line_height;
-
-	    /* Redering full text */
-	    if(model->matches.selected == i) {
-	      /* Render selected text */
-	      draw_text(view, slct_style, x, y, max_item_width, view->menu.line_height, item);
-	    } else {
-	      /* Render text with alternating style */
-	      draw_text(view, item_style, x, y, max_item_width, view->menu.line_height, item);
-	    } /* if ... */
-
-	  } /* for ... */
-
+	} else { die("No such method implemented");
   } /* if ... */
 
 	XCopyArea(view->x->display, view->pixmap, view->menu_hwnd, view->gc, view->menu.x, view->menu.y, view->menu.width, view->menu.height, 0, 0);
 	XSync(view->x->display, False);
 
+}/*}}}*/
+
+void render_single_column_view(dview_t *view, int y, const xcmd_t *model)
+{/*{{{*/
+  /* Identify page, where the selected item is placed on */
+  const size_t block = model->matches.selected / view->menu.lines;
+  const size_t idx_lo = block * view->menu.lines;
+  const size_t idx_hi = min(idx_lo + view->menu.lines, model->matches.count);
+  int x = view->menu.x;
+  size_t i;
+  
+  for(i = idx_lo; i < idx_hi; i += 1) {
+    const int even_row_number = (idx_lo - i) % 2;
+    const dstyle_t *item_style = even_row_number ? &view->menu.style_normal_even : &view->menu.style_normal_odd;
+    const dstyle_t *slct_style = &view->menu.style_select;
+    const char *item = model->matches.index[i];
+  
+    /* Redering full text */
+    if(model->matches.selected == i) {
+      /* Render selected text */
+      draw_text(view, slct_style, x, y, view->menu.width, view->menu.line_height, item);
+    } else {
+      /* Render text with alternating style */
+      draw_text(view, item_style, x, y, view->menu.width, view->menu.line_height, item);
+    } /* if ... */
+  
+    y += view->menu.line_height;
+  
+  } /* for ... */
+}/*}}}*/
+
+void render_multiple_column_view(dview_t *view, int y, const xcmd_t *model)
+{/*{{{*/
+  const dstyle_t *style[3] = 
+  {/*{{{*/
+    &view->menu.style_normal_even,
+    &view->menu.style_normal_odd,
+    &view->menu.style_select
+  };/*}}}*/
+
+  const int padding = style[2]->font->padding;
+  int total_width = view->menu.width;
+  int x = view->menu.x;
+
+  /* Identify block, where the selected item is placed in */
+  const size_t block = model->matches.selected / view->menu.lines;
+  size_t i = block * view->menu.lines;
+
+  /* Render currently visible items, until the screen is filled */
+  while(0 < total_width) {
+    const int column_lo = i;
+    const int column_hi = min(i + view->menu.lines, model->matches.count);
+    int max_item_width = 0;
+  
+    /* Calculate width of current column */
+    for(; i < column_hi; i += 1) {
+      const char *text = model->matches.index[i];
+      const size_t n = strlen(text);
+      const int w = get_textwidth(style[2]->font, text, n);
+      max_item_width = padding + max(max_item_width, w);
+    }/* for ... */
+  
+    /* Check if there's eneough space for the current column */
+    total_width -= max_item_width;
+    if(0 > total_width) break;
+  
+    /* Actually render current column */
+    for(i = column_lo; i < column_hi; i += 1) {
+      const int id = (model->matches.selected != i) ? (column_lo - i) % 2 : 2;
+      const int yy = y + (i - column_lo) * view->menu.line_height;
+      const char *text = model->matches.index[i];
+  
+      draw_text(view, style[id], x, yy, max_item_width, view->menu.line_height, text);
+    } /* for ... */
+  
+    x += max_item_width + padding;
+    if(column_lo == column_hi) break;
+    i = column_hi;
+  } /* while ... */
 }/*}}}*/

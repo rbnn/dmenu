@@ -13,8 +13,10 @@ struct dmenu_control
   XIM xim;
   XIC xic;
   inpbuf_t input;
-  int fast_startup: 1;  /* Perform fast start-up */
-  int do_exit:      1;  /* Exit main loop */
+  int fast_startup;  /* Perform fast start-up */
+  int do_exit;  /* Exit main loop */
+  const char *result;
+  const char *exec;
 };/*}}}*/
 
 void init_control(dctrl_t *control, const dx11_t *x, const Window hwnd);

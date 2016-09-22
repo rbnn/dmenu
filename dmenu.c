@@ -5,29 +5,6 @@
 #include <getopt.h>
 // #include <libconfig.h>
 
-/* static char const optstr[] = "ac::hfil:p:m:vx::"; */
-static char const optstr[] = "bhfil:p:m:v";
-static struct option optlng[] =
-{
-  /* {"auto-complete",       0, NULL, 'a'}, */
-  {"bottom",              0, NULL, 'b'},
-  /* {"config",              2, NULL, 'c'}, */
-  {"help",                0, NULL, 'h'},
-  {"ignore-case",         0, NULL, 'i'},
-  {"fast",                0, NULL, 'f'},
-  {"lines",               1, NULL, 'l'},
-  {"prompt",              1, NULL, 'p'},
-  /* {"match",               2, NULL, 'x'}, */
-  {"monitor",             1, NULL, 'm'},
-  /* {"font",                1, NULL,  1 }, */
-  /* {"normal-background",   1, NULL,  2 }, */
-  /* {"normal-foreground",   1, NULL,  3 }, */
-  /* {"selected-background", 1, NULL,  4 }, */
-  /* {"selected-foreground", 1, NULL,  5 }, */
-  {"version",             0, NULL, 'v'},
-  {NULL,                  0, NULL,  0 }
-};
-
 #include "config.h"
 
 #ifdef DISABLED
@@ -263,38 +240,9 @@ read_configuration(char const *const path)
 }
 #endif /* DISABLED */
 
-static void
-usage(void)
-{
-	fputs("usage: dmenu [-c|--config=FILE] [-h|--help] [-f|--fast]\n"
-	      "             [-l|--lines=N] [-p|--prompt=STR] [-x|--match=(sub|prefix)]\n"
-	      "             [-a|--auto-complete] [-m|--monitor=n] [--font=FONT]\n"
-	      "             [--normal-foreground=CLR] [--normal-background=CLR]\n"
-	      "             [--selected-foreground=CLR] [--selected-background=CLR]\n"
-	      "             [-v|--version]\n", stderr);
-	exit(1);
-}
-
 #include "x.h"
 #include "viewer.h"
 #include "controller.h"
-
-void dmenu_default_menu(dview_t *view)
-{/*{{{*/
-  assert(view);
-  debug("Restore default menu options.");
-
-  view->menu.line_height = -1;
-  view->menu.height = -1;
-  view->menu.width = -1;
-  view->menu.x = -1;
-  view->menu.y = -1;
-  view->menu.lines = 0;
-
-  memset(&view->menu.style_normal_even, 0, sizeof(dstyle_t));
-  memset(&view->menu.style_normal_odd, 0, sizeof(dstyle_t));
-  memset(&view->menu.style_select, 0, sizeof(dstyle_t));
-}/*}}}*/
 
 void dmenu_getopt(dx11_t *x, xcmd_t *model, dview_t *view, dctrl_t *control, int argc, char *argv[])
 {/*{{{*/
@@ -304,7 +252,6 @@ void dmenu_getopt(dx11_t *x, xcmd_t *model, dview_t *view, dctrl_t *control, int
   assert(control);
   xcfg_t model_config;
 
-  dmenu_default_menu(view);
   xcmd_config_default(&model_config);
 
   debug("Parse command line options.");
@@ -313,54 +260,34 @@ void dmenu_getopt(dx11_t *x, xcmd_t *model, dview_t *view, dctrl_t *control, int
   view->menu.lines = 5;
   view->prompt.text = "~>";
   view->show_at_bottom = 0;
+  view->single_column = 0;
   control->fast_startup = 0;
+  // char *config_file = NULL;
 
-	int c, idx;
-	opterr = 0;
+  const GOptionEntry options[] = 
+  {
+    {"bottom",      'b', 0, G_OPTION_ARG_NONE,    &view->show_at_bottom,          "Place window at the bottom of the screen", NULL  },
+    /* {"config",      'c', 0, G_OPTION_ARG_STRING,  &config_file,                   "Load configuration from FILE",             "FILE"}, */
+    /* {"exec",        'e', 0, G_OPTION_ARG_STRING,  &control->exec,                 "Execute PROG using selection",             "PROG"}, */
+    {"ignore-case", 'i', 0, G_OPTION_ARG_NONE,    &model_config.case_insensitive, "Compare strings ignoring case",            NULL  },
+    {"fast",        'f', 0, G_OPTION_ARG_NONE,    &control->fast_startup,         "Read input after grabbing the keyboard",   NULL  },
+    {"lines",       'l', 0, G_OPTION_ARG_INT,     &view->menu.lines,              "Display input using N lines",              "N"   },
+    {"prompt",      'p', 0, G_OPTION_ARG_STRING,  &view->prompt.text,             "Use STR as prompt message",                "STR" },
+    {"monitor",     'm', 0, G_OPTION_ARG_INT,     &x->monitor,                    "Place window on screen ID",                "ID"  },
+    {"single-column",0,  0, G_OPTION_ARG_NONE,    &view->single_column,           "Render items as single column view",       NULL  },
+    {NULL,           0 , 0, 0,                    NULL,                           NULL,                                       NULL  }
+  };
 
-	while(-1 != (c = getopt_long(argc, argv, optstr, optlng, &idx))) {
-	  switch(c) {
-	    case 'b':   /* Bottom bar */
-	      view->show_at_bottom = 1;
-	      break;
+  GError *error = NULL;
+  GOptionContext *context = g_option_context_new("- menu for the X Window System");
+  g_option_context_add_main_entries(context, options, NULL);
 
-	    case 'h':   /* print help message */
-	      usage();
-	      exit(EXIT_SUCCESS);
-
-	    case 'f':   /* fast mode */
-	      control->fast_startup = 1;
-	      break;
-
-	    case 'i':   /* case-insensitive item matching */
-	      model_config.case_insensitive = 1;
-	      break;
-
-	    case 'l':   /* number of lines in vertical list */
-	      view->menu.lines = atoi(optarg);
-	      break;
-
-	    case 'p':   /* adds prompt to left of input field */
-	      view->prompt.text = optarg;
-	      break;
-
-	    case 'm':   /* select monitor */
-	      x->monitor = atoi(optarg);
-	      break;
-
-	    case 'v':   /* print version number */
-	      puts("dmenu-"VERSION);
-	      exit(0);
-
-	    default:
-	      usage();
-	      exit(EXIT_FAILURE);
-
-	  } /* switch ... */
-	} /* while ... */
+  die_if(!g_option_context_parse(context, &argc, &argv, &error), "Option parsing failed: %s", error->message);
+  g_option_context_free(context);
 
 	/* Apply model configuration */
 	xcmd_init(model, &model_config);
+
 }/*}}}*/
 
 int main(int argc, char *argv[])
@@ -375,14 +302,14 @@ int main(int argc, char *argv[])
   dmenu_getopt(&x, &model, &view, &ctrl, argc, argv);
 
   /* Setup callback functions for the model */
-	model.observer = (void(*)(void*,const xcmd_t*))update_ui;
+	model.observer = (void(*)(void*,const xcmd_t*))viewer_update;
 	model.observer_data = &view;
 
   /* Initialize X window system */
   init_x11(&x);
 
   /* Setup the viewer */
-	init_viewer(&view, &x, colors, fonts);
+	viewer_init(&view, &x, colors, fonts);
 
   /* Load data and initialize controller. Flag fast_startup is set inside of
    * dmenu_getopt */
@@ -411,6 +338,10 @@ int main(int argc, char *argv[])
 	// drw_free(drw);
 	XSync(x.display, False);
 	XCloseDisplay(x.display);
+
+	if(ctrl.result) {
+	  printf("%s\n", ctrl.result);
+	} /* if ... */
 
 	return 1; /* unreachable */
 }

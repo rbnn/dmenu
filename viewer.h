@@ -78,11 +78,13 @@ struct dmenu_viewer
   } menu;
 
   int show_at_bottom;
+  int single_column;
 };/*}}}*/
 
 extern const char *colors[dmenu_colorscheme_last][2];
 extern const char *fonts[];
 
-void init_viewer(dview_t *view, const dx11_t *x, const char *colornames[][2], const char *fontnames[]);
-void update_ui(dview_t *view, const xcmd_t *model);
+void viewer_init(dview_t *view, const dx11_t *x, const char *colornames[][2], const char *fontnames[]);
+void viewer_update(dview_t *view, const xcmd_t *model);
+
 #endif /* DMENU_VIEWER_H */

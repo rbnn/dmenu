@@ -4,7 +4,7 @@
 void init_x11(dx11_t *x)
 {/*{{{*/
   assert(x);
-  debug("Initialize X window system.");
+  debug("Initialize X Window System.");
 
   warn_if(!setlocale(LC_CTYPE, "") || !XSupportsLocale(), "No locale support: %m");
 

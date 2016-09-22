@@ -70,12 +70,12 @@ void control_on_keypress(dctrl_t *control, xcmd_t *model, XKeyEvent *ev)
 		  case XK_p: ksym = XK_Up; break;
 
 		  case XK_k: /* delete right */
-		    inputbuffer_erase(&control->input, +1);
+		    inputbuffer_erase(&control->input, G_MAXLONG);
 		    has_changed = 1;
 		  	break;
 
-		  case XK_u: /* delete left */
-		    inputbuffer_erase(&control->input, -1);
+		  case XK_u: /* delete all */
+		    inputbuffer_erase(&control->input, G_MINLONG);
 		    has_changed = 1;
 		  	break;
 
@@ -99,8 +99,8 @@ void control_on_keypress(dctrl_t *control, xcmd_t *model, XKeyEvent *ev)
 		  case XK_KP_Enter: break;
 
 		  case XK_bracketleft:
-		    debug("Exit main loop.");
-		  	control->do_exit = 1;
+		    ksym = XK_Escape;
+		    ev->state &= ~ControlMask;
 		  	break;
 
 		  default: return;
@@ -129,16 +129,12 @@ void control_on_keypress(dctrl_t *control, xcmd_t *model, XKeyEvent *ev)
 	  	has_changed = 1;
 	  	break;
 
-	  case XK_Home:
-	  	xcmd_update_selected(model, 0, 0);
-	  	break;
-
-	  case XK_End:
-	  	xcmd_update_selected(model, G_MAXLONG, 0);
-	  	break;
+	  case XK_Home: xcmd_update_selected(model, 0, 0); break;
+	  case XK_End:  xcmd_update_selected(model, G_MAXLONG, 0); break;
 
 	  case XK_Escape:
 	  	control->do_exit = 1;
+	  	control->result = NULL;
 	  	break;
 
 	  case XK_Left:
@@ -151,13 +147,8 @@ void control_on_keypress(dctrl_t *control, xcmd_t *model, XKeyEvent *ev)
 	    has_changed = 1;
 	  	break;
 
-	  case XK_Up:
-	  	xcmd_update_selected(model, -1, 1);
-	  	break;
-
-	  case XK_Down:
-	  	xcmd_update_selected(model, +1, 1);
-	  	break;
+	  case XK_Up:   xcmd_update_selected(model, -1, 1); break;
+	  case XK_Down: xcmd_update_selected(model, +1, 1); break;
 
 	  case XK_Prior:  /* Page Up */
 	  case XK_Next:   /* Page Down */
@@ -166,6 +157,17 @@ void control_on_keypress(dctrl_t *control, xcmd_t *model, XKeyEvent *ev)
 	  case XK_Return:   /* fallthrough */
 	  case XK_KP_Enter:
 	  	control->do_exit = 1;
+
+	    if(model->matches.selected < model->matches.count) {
+	      debug("Select item %lu.", model->matches.selected);
+	      control->result = model->matches.index[model->matches.selected];
+
+	    } else {
+	      debug("Select input.");
+	      control->result = inputbuffer_get_text(&control->input);
+
+	    } /* if ... */
+
 	  	break;
 
 	  case XK_Tab:
@@ -177,8 +179,9 @@ void control_on_keypress(dctrl_t *control, xcmd_t *model, XKeyEvent *ev)
 
 	  default:
 	    if(!iscntrl(*buf)) {
-        /* Make buf nul-terminated */
+        /* Make buf nul-terminated string */
         *(buf + len) = '\0';
+
 	      /* Add text to input buffer */
 	      inputbuffer_insert(&control->input, buf);
 	      has_changed = 1;
@@ -207,10 +210,12 @@ void run_control(dctrl_t *control, xcmd_t *model)
 			continue;
 		switch(ev.type) {
 	  	case Expose:
+
 	  	  if (!ev.xexpose.count) {
 	  	    model->has_changed = 1;
 	  	    xcmd_notify_observer(model);
 	      } /* if ... */
+
 	  		break;
 
 		  case KeyPress:
@@ -218,15 +223,20 @@ void run_control(dctrl_t *control, xcmd_t *model)
 			  break;
 
 		  // case SelectionNotify:
-		  // 	if (dmenu.ui.utf8 == ev.xselection.property)
-		  // 		paste();
+
+		  //   if(ev.xselection.property == view->utf8) {
+		  //     debug("Paste clipboard");
+		  //   } /* if ... */
+
 		  // 	break;
 
 		  case VisibilityNotify:
+
 		  	if (VisibilityUnobscured != ev.xvisibility.state) {
 		  	  debug("Receive visibility notification.")
 		  		XRaiseWindow(control->x->display, control->hwnd);
 		  	} /* if ... */
+
 		  	break;
 		}
 	} /* while ... */

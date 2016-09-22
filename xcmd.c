@@ -292,12 +292,13 @@ int xcmd_update_selected(xcmd_t *ptr, const long offset, const int relative)
   debug("Update selected item.");
 
   /* An offset of 0 doesn't change anything */
-  if(!offset) return 0;
+  if(!offset && relative) return 0;
 
   /* No data */
   if(!ptr->matches.count) return 0;
 
   const size_t old_selected_item = ptr->matches.selected;
+
   if(relative) {
     const long yz = (long)ptr->matches.count;
     const long dx = clip(offset, -yz, +yz);
