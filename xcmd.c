@@ -346,7 +346,7 @@ int xcmd_auto_complete(xcmd_t *ptr)
   it += 1;
 
   while(end != it) {
-    while(str->len && strncmp(str->str, *it, str->len)) {
+    while(str->len && (*ptr->strncmp)(str->str, *it, str->len)) {
       debug("Complete? `%s' -- `%s'", str->str, *it);
       str = g_string_truncate(str, str->len - 1);
     } /* while ... */
@@ -396,7 +396,7 @@ int match_prefix(const xcmd_t *ptr, const char *input, const char *text, const v
   /* This is the case, when input is no longer a prefix of text */
   if(text_size < input_size) return 0;
 
-  return !ptr->strncmp(input, text, input_size);
+  return !(*ptr->strncmp)(input, text, input_size);
 }
 
 int match_strip_prefix(const xcmd_t *ptr, const char *input, const char *text, const void *data)
