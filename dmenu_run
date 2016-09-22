@@ -4,5 +4,5 @@
 # PATH environment variable.
 xargs -d: -I{} find {} \( -type f -or -type l \) -executable -printf "%f\n" <<<$PATH \
 | sort --unique \
-| ./dmenu "$@" \
+| dmenu "$@" \
 | ${SHELL:-"/bin/sh"}
