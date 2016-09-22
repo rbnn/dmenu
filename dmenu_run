@@ -1,2 +1,9 @@
 #!/bin/sh
-dmenu_path | dmenu "$@" | ${SHELL:-"/bin/sh"} &
+# dmenu_path | dmenu "$@" | ${SHELL:-"/bin/sh"} &
+echo $PATH \
+| tr ':' '\n' \
+| while read line; do
+  find $line \( -type f -or -type l \) -executable -printf "%f\n"
+done \
+| sort --unique \
+| ./dmenu "$@" | ${SHELL:-"/bin/sh"}
