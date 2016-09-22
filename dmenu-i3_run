@@ -1,0 +1,3 @@
+#!/bin/sh
+I3MSG=$(which i3-msg)
+./i3wm_commands.py | ./dmenu "$@" | xargs $I3MSG

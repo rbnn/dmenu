@@ -1,9 +1,8 @@
 #!/bin/sh
-# dmenu_path | dmenu "$@" | ${SHELL:-"/bin/sh"} &
-echo $PATH \
-| tr ':' '\n' \
-| while read line; do
-  find $line \( -type f -or -type l \) -executable -printf "%f\n"
-done \
+# Find all executable regular files or symbolic links to executable files and
+# print their base names. Files are searched in all directories specified in
+# PATH environment variable.
+xargs -d: -I{} find {} \( -type f -or -type l \) -executable -printf "%f\n" <<<$PATH \
 | sort --unique \
-| ./dmenu "$@" | ${SHELL:-"/bin/sh"}
+| ./dmenu "$@" \
+| ${SHELL:-"/bin/sh"}
